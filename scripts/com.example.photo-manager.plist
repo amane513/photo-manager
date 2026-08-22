@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Disabled by default. Copy to ~/Library/LaunchAgents/, replace every
+    /ABSOLUTE/PATH placeholder, validate manual operation first, then set
+    Disabled to false and load it with launchctl.
+  -->
+  <key>Label</key>
+  <string>com.example.photo-manager</string>
+  <key>Disabled</key>
+  <true/>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/ABSOLUTE/PATH/TO/photo-manager/scripts/photo-import</string>
+    <string>--config</string>
+    <string>/ABSOLUTE/PATH/TO/config.ini</string>
+  </array>
+  <!-- WatchPaths is deliberately inactive while Disabled is true. -->
+  <key>WatchPaths</key>
+  <array>
+    <string>/Volumes</string>
+  </array>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/logs/photo-import-launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/logs/photo-import-launchd.err.log</string>
+</dict>
+</plist>

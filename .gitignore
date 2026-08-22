@@ -1,0 +1,12 @@
+# Local configuration contains volume-specific paths and UUIDs.
+config.ini
+
+# Python test/runtime artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS metadata
+.DS_Store

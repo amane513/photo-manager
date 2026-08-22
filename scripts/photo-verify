@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Repository-local entry point for photo-verify."""
+import sys
+from pathlib import Path
+
+REPOSITORY = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPOSITORY / "src"))
+
+from photo_manager.cli import main  # noqa: E402
+
+
+if __name__ == "__main__":
+    sys.exit(main("verify", sys.argv[1:], program=Path(sys.argv[0]).name))
