@@ -9,6 +9,7 @@
 | ID | プラン | 状態 | 概要 |
 |---|---|---|---|
 | 0001 | [docs-refactor](0001_docs-refactor/plan.md) | 完了 | 正本、変更プラン、検討資料を分離し、要件文書を再構成した |
+| 0002 | [storage-assessment](0002_storage-assessment/plan.md) | 完了 | 予測に依存せず、4TB主HDDのバックアップ先として8TB第2 HDDを決定した |
 
 ## 今後作成するプラン
 
@@ -16,7 +17,6 @@
 
 | ID | 予定フォルダ | 概要 | 前提 |
 |---|---|---|---|
-| 0002 | `0002_storage-assessment` | 現在の写真・動画総容量、年間増加量、Macの空き容量を測定し、第2 HDDの必要容量を決める | なし |
 | 0003 | `0003_media-workflow-validation` | RAW+JPEG、XMP、Live Photo、動画を少数使い、Macでの取り込み・選別・現像・削除手順を検証する | なし |
 | 0004 | `0004_amazon-photos-validation` | JPEG、HEIC、ARWのアップロード・再取得、動画除外、ローカル削除時の挙動を検証する | 0003 |
 | 0005 | `0005_primary-storage-setup` | Ubuntuへ主HDDを固定マウントし、ディレクトリ、権限、Mac向けSMB共有を構築する | 0002 |
@@ -38,6 +38,7 @@
 | 0014 | `0014_immich-gpu-acceleration` | CPU構成が安定し、機械学習または動画変換の高速化が必要な場合 | RTX 4060 Tiを使った機械学習と動画変換を段階導入する |
 | 0015 | `0015_family-sharing-review` | 管理基盤が安定し、共有方法を見直す段階になった場合 | みてねとImmich等を小規模比較し、祖父母の移行可否を判断する |
 | 0016 | `0016_offsite-video-backup` | 動画の重要度・容量が増え、同一拠点2コピーのリスクを受容できなくなった場合 | 有料クラウドまたは別拠点HDDによる動画のオフサイト保護を設計する |
+| 0017 | `0017_google-photos-retirement` | Google Photosの全件を主HDD・第2 HDDへ保存し、Immichでの閲覧と復元を確認した後 | Google Photosの写真・動画を段階的に削除し、削除記録と最終確認を行う |
 
 この区分のIDは一覧上の仮予約である。先に別の変更が必要になった場合は、未着手プランの番号を見直してからフォルダを作成する。
 
