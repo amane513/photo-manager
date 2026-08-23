@@ -35,6 +35,21 @@ class CliTests(unittest.TestCase):
             self.assertEqual(main("verify", [], handler=lambda *_: 0, log_dir=log_dir), 0)
             self.assertEqual(main("verify", [], handler=lambda *_: 1, log_dir=log_dir), 1)
 
+    def test_verbose_flag_changes_the_recorded_log_level(self):
+        def emit(_args, _resources, logger):
+            logger.debug("diagnostic detail")
+            return 0
+
+        with tempfile.TemporaryDirectory() as directory:
+            quiet_dir = Path(directory) / "quiet"
+            verbose_dir = Path(directory) / "verbose"
+            self.assertEqual(main("verify", [], handler=emit, log_dir=quiet_dir), 0)
+            self.assertEqual(main("verify", ["-v"], handler=emit, log_dir=verbose_dir), 0)
+            quiet = "".join(path.read_text() for path in quiet_dir.glob("*.log"))
+            verbose = "".join(path.read_text() for path in verbose_dir.glob("*.log"))
+        self.assertNotIn("diagnostic detail", quiet)
+        self.assertIn("diagnostic detail", verbose)
+
     def test_symlinked_script_resolves_repository_src(self):
         with tempfile.TemporaryDirectory() as directory:
             link = Path(directory) / "photo-import"

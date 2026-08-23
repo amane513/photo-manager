@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from photo_manager.runtime import RunResources
+from photo_manager.runtime import OperationalError, PhotoManagerError, RunInterrupted, RunResources
 
 
 class RuntimeTests(unittest.TestCase):
@@ -21,3 +21,8 @@ class RuntimeTests(unittest.TestCase):
             resources.cleanup()
             resources.cleanup()
             self.assertFalse(part.exists())
+
+    def test_interruption_is_not_an_operational_failure(self):
+        self.assertTrue(issubclass(RunInterrupted, PhotoManagerError))
+        self.assertFalse(issubclass(RunInterrupted, OperationalError))
+        self.assertEqual(RunInterrupted("received SIGINT").exit_code, 1)

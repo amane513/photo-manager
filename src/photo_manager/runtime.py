@@ -29,8 +29,16 @@ class OperationalError(PhotoManagerError):
     exit_code = 1
 
 
-class RunInterrupted(OperationalError):
-    """SIGINT or SIGTERM was received while a command was running."""
+class RunInterrupted(PhotoManagerError):
+    """SIGINT or SIGTERM was received while a command was running.
+
+    This is deliberately *not* an :class:`OperationalError`: an interruption
+    aborts the whole run instead of failing one operation.  Keeping it outside
+    that hierarchy stops per-item handlers, which catch ``OperationalError`` to
+    record a single failure and continue, from swallowing the abort.
+    """
+
+    exit_code = 1
 
 
 class RunResources:

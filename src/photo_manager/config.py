@@ -46,11 +46,7 @@ def _value(parser: configparser.ConfigParser, section: str, option: str, *, requ
 
 def _archive(parser: configparser.ConfigParser, section: str, *, required: bool, subdir: str = "Camera") -> Optional[ArchiveVolume]:
     root = _value(parser, section, "root")
-    if root is None:
-        root = _value(parser, section, "path")
     uuid = _value(parser, section, "volume_uuid")
-    if uuid is None:
-        uuid = _value(parser, section, "uuid")
     if required and not root:
         raise UsageError("missing [{0}] root".format(section))
     if required and not uuid:
@@ -78,23 +74,21 @@ def load_config(path: Optional[Path] = None) -> Config:
     except (OSError, configparser.Error) as exc:
         raise UsageError("cannot read configuration {0}: {1}".format(config_path, exc))
 
-    # The documented section names are [dest], [source], [mirror], [tools],
-    # and [options].  Supporting Phase-0's spelling avoids silently making an
-    # existing local example unusable while still normalising internally.
-    dest_section = "dest" if parser.has_section("dest") else "destination"
-    dest = _archive(parser, dest_section, required=True)
+    # Only the documented section and option names are accepted.  An
+    # undocumented alias would silently absorb a typo or a stale spelling and
+    # let the command run against a configuration the user did not intend.
+    dest = _archive(parser, "dest", required=True)
     assert dest is not None
     source = _value(parser, "source", "root")
-    if source is None:
-        source = _value(parser, "source", "path")
-    mirror_section = "mirror"
-    mirror = _archive(parser, mirror_section, required=False)
+    # The mirror keeps the primary archive's role subdirectory unless it is
+    # explicitly overridden: both volumes describe the same archive layout.
+    mirror = _archive(parser, "mirror", required=False, subdir=dest.subdir)
     exiftool_value = _value(parser, "tools", "exiftool", required=True)
     assert exiftool_value is not None
     exiftool = Path(exiftool_value).expanduser()
     if not exiftool.is_absolute():
         raise UsageError("[tools] exiftool must be an absolute path")
-    option_section = "options" if parser.has_section("options") else "import"
+    option_section = "options"
     algorithm = _value(parser, option_section, "hash_algorithm", required=True)
     if algorithm != "sha256":
         raise UsageError("hash_algorithm must be sha256")
@@ -105,7 +99,7 @@ def load_config(path: Optional[Path] = None) -> Config:
     if margin < 1.0:
         raise UsageError("free_space_margin must be at least 1.0")
     try:
-        eject = parser.getboolean(option_section, "eject_after_import", fallback=parser.getboolean(option_section, "eject_after_success", fallback=True))
+        eject = parser.getboolean(option_section, "eject_after_import", fallback=True)
     except ValueError as exc:
         raise UsageError("eject_after_import must be true or false: {0}".format(exc))
     return Config(dest, Path(source).expanduser() if source else None, mirror, exiftool, algorithm, margin, eject)

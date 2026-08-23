@@ -2,6 +2,8 @@
 
 Sony カメラの SD カードから外付け HDD へ、検証しながら写真・RAW・動画を取り込む macOS 向けツールです。対象は `JPG`、`ARW`、`MP4` と動画に対応する `XML` だけです。保存先は `Camera/YYYY/YYYY-MM/` とし、既存データは上書きも削除もしません。
 
+詳細な仕様、アーキテクチャ、設計判断、進行中の作業計画は [`docs/README.md`](docs/README.md) から参照できます。
+
 ## 最重要の安全事項
 
 **このツールは SD カード内のデータを絶対に削除・上書き・リネームしません。** SD カードは読み取り元としてだけ扱います。成功時に行う `eject` は macOS から安全に取り外す操作であり、データ消去ではありません。
@@ -32,15 +34,19 @@ chmod 600 ~/.config/photo-manager/config.ini
 - `[dest] root` / `volume_uuid`: 主アーカイブ HDD。UUID 照合に失敗した場合は中止します。
 - `[dest] subdir`: 保存先の役割ディレクトリ（既定は `Camera`）。
 - `[source] root`: SD カードのマウントポイント。空欄なら `/Volumes` から安全に自動検出します。候補が 0 件または複数件なら選ばず中止します。
-- `[mirror]`: 2 台目 HDD の設定。導入するまで空欄のままにします。
+- `[mirror]`: 2 台目 HDD の設定。導入するまで空欄のままにします。`[mirror] subdir` を省略すると `[dest] subdir` を引き継ぎます（両ボリュームは同じ構成を表すため）。
 - `[tools] exiftool`: 実行可能な絶対パス。
 - `[options] eject_after_import`: 全件成功・台帳確認済みの場合だけ eject するか（既定 `true`）。
 
 設定ファイルは機器固有の情報を含むため Git に追加しません。
 
+節名・項目名は `config.example.ini` に書かれているものだけを受け付けます。別名（`[destination]`、`path`、`uuid`、`[import]`、`eject_after_success` など）は用意していません。綴り違いを黙って無視して意図しない設定で走るより、未知の項目として中止するほうが安全なためです。
+
 ## 使い方
 
 初回は重要でないテスト SD カードとテスト用ボリュームで必ず dry-run します。dry-run はコピー、台帳修復、一時ファイル掃除、eject を含む永続的変更を一切行いません。
+
+すべてのコマンドで `-v` / `--verbose` を付けると、通常の進捗行に加えて DEBUG レベルの診断行がログとコンソールへ出ます。
 
 ```sh
 # 取り込み計画だけを表示する（最初に必ず実行）
@@ -69,6 +75,10 @@ scripts/photo-mirror --to /Volumes/CameraArchive_Backup --to-volume-uuid '<mirro
 
 取り込みはコピー後に保存先を開き直して sha256 を再計算し、全対象に有効な台帳レコードがあるときだけ成功扱いにします。同名・同内容はスキップし、同名・別内容は `_2`、`_3` のような別名で保存します。既存ファイルを置き換える経路はありません。
 
+### 撮影日時の判定
+
+保存先の `YYYY/YYYY-MM/` と先頭の `YYYYMMDD_HHMMSS_` は撮影日時から決まります。静止画は EXIF `DateTimeOriginal`、動画は**サイドカー XML の `<CreationDate>`（タイムゾーン付き）が最優先**です。XML が無い、または壊れている動画は MP4 側のタグで判定します。このとき QuickTime の `CreateDate` は UTC で記録されているため、そのまま現地時刻として扱わず、`TimeZone` タグのオフセットへ変換してから使います（実測では `CreateDate` 11:22:20 + `TimeZone` `+09:00` が XML の `2026-08-18T20:22:20+09:00` と一致します。詳細は [ADR 0004](docs/decisions/0004-quicktime-capture-time.md)）。`CreateDate` 自体にオフセットが付いている場合はそれを尊重して同じ時点を保ちます。`CreateDate` と `TimeZone` の片方でも取得できない場合だけ、ファイル更新日時へフォールバックします。フォルダの年月は記録された現地時刻で決まり、UTC には正規化しません。
+
 ### eject と通常運用
 
 設定で有効でも、dry-run でないこと、全対象のコピーまたは同一内容確認、全レコードの台帳確認、失敗 0 件のすべてを満たした場合だけ SD カードを eject します。条件を一つでも満たさない場合、カードは挿したままです。
@@ -93,6 +103,27 @@ shasum -a 256 /Volumes/CameraArchive_M/Camera/2026/2026-08/20260818_192925_DSC00
 - 一時ファイルとロック: `<HDD>/_photo-manager/`。`Camera/` ツリーのデータファイルではありません。
 
 失敗時は終了コードと該当ログを確認し、SD カードをフォーマットせずに同じコマンドを再実行してください。台帳の末尾だけが書きかけの場合は、元台帳をログディレクトリへ退避できる場合に限り修復します。途中の破損や不整合は自動修復せず停止します。
+
+### 読み取り専用でマウントされた HDD の検証
+
+`photo-verify` はロックなしでは決して検証を続けません。読み取り専用マウントでは常設ロックファイル `<HDD>/_photo-manager/import.lock` を新規作成できないため、既存のロックファイルを読み取り専用で開いて共有ロックを取得します。ロックファイルが存在しない、または共有ロックを取得できない場合は終了コード 2 で中止します。その場合は、一度書き込み可能な状態でいずれかのコマンドを実行してロックファイルを作成してください。
+
+### 台帳の書きかけ一時ファイルが残った場合
+
+中断や異常終了の直後に、次の管理用一時ファイルが残ることがあります。どちらも `_photo-manager/` 内の管理ファイルで、`Camera/` の写真・動画ではありません。
+
+- `<HDD>/_photo-manager/checksums.tsv.mirror.part`（`photo-mirror` の台帳更新の書きかけ）
+- `<HDD>/_photo-manager/checksums.tsv.repair.part`（`photo-import` の台帳末尾修復の書きかけ）
+
+通常は再実行だけで復旧します。`photo-import`（台帳修復時）と `photo-mirror`（台帳更新時）は排他ロックを持っているため、残骸を削除してから処理を続け、ログに `Removed stale managed ledger temporary ...` を残します。`photo-verify` は台帳を一切変更しないので、残骸をそのままにします。
+
+再実行しても `managed temporary already exists` で止まる場合は、他の photo-manager が動いていないことを確認したうえで、該当ファイルだけを手動で削除してから再実行してください。`checksums.tsv` 本体や `Camera/` 以下は削除しません。
+
+```sh
+ls -l /Volumes/CameraArchive_M/_photo-manager/
+rm /Volumes/CameraArchive_M/_photo-manager/checksums.tsv.mirror.part
+rm /Volumes/CameraArchive_M/_photo-manager/checksums.tsv.repair.part
+```
 
 ## Amazon Photos
 

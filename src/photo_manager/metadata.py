@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .discovery import DiscoveryIssue, SourceFile, SourceKind
 
@@ -65,6 +65,32 @@ def _mtime(file: SourceFile) -> CaptureTime:
     return CaptureTime(datetime.fromtimestamp(file.mtime), "mtime")
 
 
+def _quicktime_capture(row: Mapping[str, object]) -> Optional[CaptureTime]:
+    """Resolve QuickTime `CreateDate` + `TimeZone` into a local capture time.
+
+    See ADR 0004.  Requirements §7 states, and a real Sony clip confirms, that
+    the QuickTime `CreateDate` is stored in UTC: exiftool reported the naive
+    `2026:08:18 11:22:20` with `TimeZone` `+09:00` while the sidecar XML gave
+    `2026-08-18T20:22:20+09:00`.  The value must therefore be *interpreted* as
+    UTC and converted, not merely re-labelled with the offset (which was nine
+    hours early in JST and could pick the wrong day and month folder).
+
+    When exiftool already resolved an offset itself -- for example under
+    `-api QuickTimeUTC`, which uses the importing Mac's zone -- that offset
+    pins the instant, so it is honoured rather than discarded and `TimeZone`
+    only decides the local rendering.  Returns ``None`` when either tag is
+    missing or unparsable, which leaves the documented mtime fallback to the
+    caller.
+    """
+    create = _parse_exif_datetime(row.get("CreateDate"))
+    zone = _parse_timezone(row.get("TimeZone"))
+    if create is None or zone is None:
+        return None
+    if create.tzinfo is None:
+        create = create.replace(tzinfo=timezone.utc)
+    return CaptureTime(create.astimezone(zone), "quicktime:CreateDate+TimeZone")
+
+
 def read_xml_creation_date(path: Path) -> Optional[datetime]:
     """Read the first CreationDate value, returning None for malformed/missing."""
     try:
@@ -83,7 +109,10 @@ def read_xml_creation_date(path: Path) -> Optional[datetime]:
     return None
 
 
-def read_exiftool_json(exiftool: Path, files: Sequence[SourceFile], *, runner=subprocess.run) -> Mapping[Path, Mapping[str, object]]:
+Runner = Callable[..., subprocess.CompletedProcess]
+
+
+def read_exiftool_json(exiftool: Path, files: Sequence[SourceFile], *, runner: Runner = subprocess.run) -> Mapping[Path, Mapping[str, object]]:
     """Read only required tags and strictly bind every JSON row to its input.
 
     ``SourceFile`` must exactly be one requested absolute pathname.  Missing,
@@ -124,7 +153,7 @@ def read_exiftool_json(exiftool: Path, files: Sequence[SourceFile], *, runner=su
     return records
 
 
-def determine_capture_times(files: Sequence[SourceFile], exiftool: Path, *, runner=subprocess.run) -> MetadataResult:
+def determine_capture_times(files: Sequence[SourceFile], exiftool: Path, *, runner: Runner = subprocess.run) -> MetadataResult:
     """Apply the documented capture-time precedence without modifying sources."""
     media = [file for file in files if file.kind in (SourceKind.STILL, SourceKind.VIDEO)]
     try:
@@ -152,9 +181,7 @@ def determine_capture_times(files: Sequence[SourceFile], exiftool: Path, *, runn
             if xml_value is not None:
                 capture = CaptureTime(xml_value, "xml:CreationDate")
             else:
-                create = _parse_exif_datetime(row.get("CreateDate"))
-                zone = _parse_timezone(row.get("TimeZone"))
-                capture = CaptureTime(create.replace(tzinfo=zone), "quicktime:CreateDate+TimeZone") if create and zone else _mtime(file)
+                capture = _quicktime_capture(row) or _mtime(file)
         captures[file.path] = capture
     for file in files:
         if file.kind != SourceKind.SIDECAR_XML:

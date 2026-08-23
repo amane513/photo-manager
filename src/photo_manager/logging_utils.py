@@ -7,8 +7,12 @@ from pathlib import Path
 from typing import Optional
 
 
-def configure_logging(command: str, log_dir: Optional[Path] = None) -> logging.Logger:
-    """Create a per-run UTF-8 log under the macOS conventional log location."""
+def configure_logging(command: str, log_dir: Optional[Path] = None, *, verbose: bool = False) -> logging.Logger:
+    """Create a per-run UTF-8 log under the macOS conventional log location.
+
+    ``verbose`` lowers the threshold to DEBUG so that ``-v`` genuinely adds
+    diagnostic lines rather than only appearing in the help text.
+    """
     if log_dir is None:
         log_dir = Path.home() / "Library" / "Logs" / "photo-manager"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -21,7 +25,7 @@ def configure_logging(command: str, log_dir: Optional[Path] = None) -> logging.L
         number += 1
 
     logger = logging.getLogger("photo_manager")
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     logger.propagate = False
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
@@ -34,4 +38,5 @@ def configure_logging(command: str, log_dir: Optional[Path] = None) -> logging.L
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
     logger.info("Started %s; log file: %s", command, path)
+    logger.debug("Verbose logging is enabled; DEBUG diagnostics are included")
     return logger

@@ -37,6 +37,12 @@ class TransferPlan:
     ``ledger_missing`` is meaningful only for a skipped file.  It tells the
     ledger phase that the already-existing archive file was verified against
     the source and can therefore have its missing record safely backfilled.
+
+    ``verified_digest`` is likewise only set for a skipped file: it is the
+    SHA-256 this planning pass actually read out of the *existing archive
+    file* and found equal to the source.  Carrying it forward lets the ledger
+    phase compare records against a digest this run verified instead of
+    hashing the same pair a second time.
     """
 
     source: SourceFile
@@ -46,6 +52,7 @@ class TransferPlan:
     action: PlannedAction
     collision_detected: bool
     ledger_missing: bool = False
+    verified_digest: Optional[str] = None
 
     @property
     def target_path(self) -> Path:
@@ -70,6 +77,80 @@ def sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
     except OSError as exc:
         raise NamingError("cannot hash {0}: {1}".format(path, exc))
     return digest.hexdigest()
+
+
+@dataclass(frozen=True)
+class _Measurement:
+    """A digest together with the exact file state it was measured on."""
+
+    digest: str
+    size: int
+    mtime_ns: int
+
+
+class DigestCache:
+    """Digests measured during one run, reused only while a file is unchanged.
+
+    Import plans the same files twice -- a read-only provisional pass before
+    the archive lock, then the authoritative pass after it -- and checks them
+    once more before ejecting.  Hashing a full card repeatedly is the dominant
+    cost of re-importing it, so a digest measured earlier may be carried
+    forward, but only for a file whose ``st_size`` and ``st_mtime_ns`` are
+    still exactly what they were when it was hashed.  Any difference, an
+    unreadable stat, or a file that changed *while* it was being hashed
+    discards the entry and forces a fresh read.
+
+    The cache may therefore remove work; it must never remove a decision.
+    Every comparison still happens on the same code path as an uncached run.
+    """
+
+    def __init__(self) -> None:
+        self._entries: Dict[Path, _Measurement] = {}
+
+    @staticmethod
+    def _state(path: Path) -> Optional[Tuple[int, int]]:
+        try:
+            info = os.stat(str(path))
+        except OSError:
+            return None
+        return (info.st_size, info.st_mtime_ns)
+
+    def remember(self, path: Path, digest: str) -> None:
+        """Record a digest computed elsewhere, e.g. while copying the file."""
+        state = self._state(path)
+        if state is None:
+            self._entries.pop(path, None)
+            return
+        self._entries[path] = _Measurement(digest, state[0], state[1])
+
+    def reuse(self, path: Path) -> Optional[str]:
+        """Return the remembered digest only if the file is provably unchanged."""
+        entry = self._entries.get(path)
+        if entry is None:
+            return None
+        state = self._state(path)
+        if state != (entry.size, entry.mtime_ns):
+            # Size or mtime moved (or the file vanished): the remembered digest
+            # is no longer evidence about the current bytes.
+            self._entries.pop(path, None)
+            return None
+        return entry.digest
+
+    def measure(self, path: Path) -> str:
+        """Hash the file now, remembering it only if it held still meanwhile."""
+        before = self._state(path)
+        digest = sha256_file(path)
+        after = self._state(path)
+        if before is not None and after is not None and before == after:
+            self._entries[path] = _Measurement(digest, after[0], after[1])
+        else:
+            self._entries.pop(path, None)
+        return digest
+
+    def digest(self, path: Path) -> str:
+        """Reuse an unchanged file's digest, otherwise hash it again."""
+        remembered = self.reuse(path)
+        return remembered if remembered is not None else self.measure(path)
 
 
 def archive_relative_path(capture_time: CaptureTime, original_name: str, *, subdir: str = "Camera") -> Path:
@@ -114,18 +195,21 @@ def _existing_regular_file(path: Path) -> bool:
     return True
 
 
-def _same_content(source: SourceFile, candidate: Path, source_digests: Dict[Path, str]) -> bool:
-    """Fast size check followed by SHA-256, as required for every candidate."""
+def _same_content(source: SourceFile, candidate: Path, digests: DigestCache) -> Optional[str]:
+    """Fast size check followed by SHA-256, as required for every candidate.
+
+    Returns the verified digest of ``candidate`` when both sides match, and
+    ``None`` otherwise.  Both hashes go through the cache, so an unchanged
+    file measured earlier in the same run is not read again; a changed one is.
+    """
     try:
         if candidate.stat().st_size != source.size:
-            return False
+            return None
     except OSError as exc:
         raise NamingError("cannot stat destination {0}: {1}".format(candidate, exc))
-    source_digest = source_digests.get(source.path)
-    if source_digest is None:
-        source_digest = sha256_file(source.path)
-        source_digests[source.path] = source_digest
-    return source_digest == sha256_file(candidate)
+    source_digest = digests.digest(source.path)
+    candidate_digest = digests.digest(candidate)
+    return candidate_digest if candidate_digest == source_digest else None
 
 
 def build_transfer_plans(
@@ -136,20 +220,27 @@ def build_transfer_plans(
     subdir: str = "Camera",
     ledger_paths: Optional[Iterable[Path]] = None,
     ledger_has_record: Optional[Callable[[Path], bool]] = None,
+    digest_cache: Optional[DigestCache] = None,
 ) -> Tuple[TransferPlan, ...]:
     """Resolve deterministic safe destinations without writing anywhere.
 
     A matching existing candidate is skipped.  A differing occupant is never
     overwritten: numbered candidates are examined in sequence, each using the
-    same size-then-hash comparison, until an absent path is found.  ``ledger``
-    input is optional because its parser belongs to Phase 5; callers that
-    provide it receive the precise backfill flag for skipped files.
+    same size-then-hash comparison, until an absent path is found.  The ledger
+    input is optional; callers that provide it receive the precise backfill
+    flag for skipped files.
+
+    ``digest_cache`` lets a caller that plans more than once (import's
+    provisional pass followed by its authoritative post-lock pass) carry
+    digests across the passes.  Without it a private cache is used, so a
+    single call behaves exactly as before.  A cached digest is used only while
+    the file's size and mtime are unchanged; see :class:`DigestCache`.
     """
     if ledger_paths is not None and ledger_has_record is not None:
         raise ValueError("provide ledger_paths or ledger_has_record, not both")
     root = destination_root.absolute()
     known_ledger_paths = set(ledger_paths) if ledger_paths is not None else None
-    source_digests: Dict[Path, str] = {}
+    digests = digest_cache if digest_cache is not None else DigestCache()
     plans = []
 
     # The order does not alter individual names, but makes dry-run output and
@@ -167,14 +258,16 @@ def build_transfer_plans(
         number = 1
         while _existing_regular_file(candidate):
             collision = True
-            if _same_content(source, candidate, source_digests):
+            verified = _same_content(source, candidate, digests)
+            if verified is not None:
                 if ledger_has_record is not None:
                     missing = not ledger_has_record(relative)
                 elif known_ledger_paths is not None:
                     missing = relative not in known_ledger_paths
                 else:
                     missing = False
-                plans.append(TransferPlan(source, capture, candidate, relative, PlannedAction.SKIP, collision, missing))
+                plans.append(TransferPlan(source, capture, candidate, relative, PlannedAction.SKIP, collision,
+                                          missing, verified))
                 break
             number += 1
             candidate = candidate.with_name(_numbered_name(base_name, number))

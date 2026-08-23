@@ -11,8 +11,10 @@ import csv
 import fcntl
 import hashlib
 import io
+import logging
 import os
 import re
+import stat
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -23,6 +25,9 @@ from .runtime import OperationalError
 
 LEDGER_DIRECTORY = "_photo-manager"
 LEDGER_FILENAME = "checksums.tsv"
+# Child of the "photo_manager" run logger, so a discarded leftover always
+# reaches the per-run log file instead of disappearing silently.
+_LOGGER = logging.getLogger(__name__)
 _HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _INTEGER = re.compile(r"^(0|[1-9][0-9]*)$")
 
@@ -191,45 +196,107 @@ def _backup_original(path: Path, log_dir: Path) -> Path:
     raise LedgerError("could not allocate corrupt ledger backup filename")
 
 
-def _replace_records(path: Path, records: Iterable[LedgerRecord]) -> None:
+def _discard_stale_temporary(temporary: Path, *, purpose: str) -> None:
+    """Remove a leftover management temporary, never a data or foreign file.
+
+    Only callers holding the destination's exclusive lock may reach this: no
+    other process of this tool can then own the leftover.  The removal is
+    announced so an operator can tell recovery from a silent overwrite.
+    """
+    try:
+        info = os.lstat(str(temporary))
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise LedgerError("could not inspect stale managed temporary {0}: {1}".format(temporary, exc))
+    if not stat.S_ISREG(info.st_mode):
+        raise LedgerError("refusing {0}: managed temporary path is not a regular file: {1}".format(purpose, temporary))
+    try:
+        temporary.unlink()
+    except OSError as exc:
+        raise LedgerError("could not remove stale managed temporary {0}: {1}".format(temporary, exc))
+    _LOGGER.warning("Removed stale managed ledger temporary before %s: %s (%d byte(s))",
+                    purpose, temporary, info.st_size)
+
+
+def _open_managed_temporary(temporary: Path, *, purpose: str, allow_stale_temporary: bool) -> int:
+    """Exclusively create the management temporary this module then owns."""
+    try:
+        return os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        if not allow_stale_temporary:
+            raise LedgerError("refusing {0}: managed temporary already exists: {1}".format(purpose, temporary))
+    except OSError as exc:
+        raise LedgerError("could not create managed temporary {0}: {1}".format(temporary, exc))
+    _discard_stale_temporary(temporary, purpose=purpose)
+    try:
+        return os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except OSError as exc:
+        raise LedgerError("could not create managed temporary {0}: {1}".format(temporary, exc))
+
+
+def _discard_unpublished_temporary(temporary: Path) -> None:
+    """Unlink a temporary this call created and never handed to os.replace."""
+    try:
+        temporary.unlink()
+    except OSError:
+        # Failing to clean up must not mask the original error; the leftover
+        # is recoverable through ``allow_stale_temporary`` on the next run.
+        pass
+
+
+def _write_all(fd: int, data: bytes) -> None:
+    offset = 0
+    while offset < len(data):
+        offset += os.write(fd, data[offset:])
+    _full_sync(fd)
+
+
+def _replace_records(path: Path, records: Iterable[LedgerRecord], *, allow_stale_temporary: bool = False) -> None:
     """Atomically replace only the management ledger after a safe backup."""
     temporary = path.with_name(path.name + ".repair.part")
+    fd = _open_managed_temporary(temporary, purpose="ledger repair", allow_stale_temporary=allow_stale_temporary)
+    # ``published`` becomes true immediately *before* os.replace is attempted:
+    # from that point the outcome must never be guessed by unlinking.
+    published = False
     try:
-        fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        raise LedgerError("refusing repair: managed repair temporary already exists")
-    try:
-        data = _serialize(records)
-        offset = 0
-        while offset < len(data):
-            offset += os.write(fd, data[offset:])
-        _full_sync(fd)
-    except OSError as exc:
         try:
-            os.close(fd)
+            _write_all(fd, _serialize(records))
+        except OSError as exc:
+            raise LedgerError("could not write repaired ledger: {0}".format(exc))
         finally:
+            os.close(fd)
+        published = True
+        try:
+            os.replace(str(temporary), str(path))
+            _sync_directory(path.parent)
+        except OSError as exc:
+            # Do not unlink after a possibly-successful replace.  The
+            # replacement affects only the management file and the backup
+            # remains available.
+            raise LedgerError("could not atomically install repaired ledger: {0}".format(exc))
+    except BaseException:
+        if not published:
             # It is a freshly O_EXCL-created management temporary, so this is
-            # the sole permitted cleanup unlink in this module.
-            temporary.unlink()
-        raise LedgerError("could not write repaired ledger: {0}".format(exc))
-    else:
-        os.close(fd)
-    try:
-        os.replace(str(temporary), str(path))
-        _sync_directory(path.parent)
-    except OSError as exc:
-        # Do not unlink after a possibly-successful replace.  The replacement
-        # affects only the management file and the backup remains available.
-        raise LedgerError("could not atomically install repaired ledger: {0}".format(exc))
+            # the sole permitted cleanup unlink in this module.  Interrupts and
+            # non-OSError failures are covered too, so no leftover can block a
+            # later repair.
+            _discard_unpublished_temporary(temporary)
+        raise
 
 
-def replace_ledger(destination_root: Path, records: Iterable[LedgerRecord]) -> None:
+def replace_ledger(destination_root: Path, records: Iterable[LedgerRecord], *, allow_stale_temporary: bool = False) -> None:
     """Atomically install a complete, already-validated ledger snapshot.
 
     This is intentionally separate from :func:`append_record`: mirroring must
     never publish a partially copied ledger.  The temporary is private to the
     destination management directory, is fsynced, parsed again, and only then
     replaces ``checksums.tsv``.  No archive data file is removed or replaced.
+
+    ``allow_stale_temporary`` may be set only by a caller which already holds
+    the destination's exclusive lock (mirror's ledger publication).  It clears
+    a leftover ``checksums.tsv.mirror.part`` from an interrupted run instead of
+    refusing forever, and logs the removal.
     """
     checked = [validate_record(record.fields()) for record in records]
     seen = set()
@@ -243,82 +310,154 @@ def replace_ledger(destination_root: Path, records: Iterable[LedgerRecord]) -> N
     except OSError as exc:
         raise LedgerError("could not create ledger directory: {0}".format(exc))
     temporary = path.with_name(path.name + ".mirror.part")
+    fd = _open_managed_temporary(temporary, purpose="mirror ledger update", allow_stale_temporary=allow_stale_temporary)
+    # ``published`` becomes true immediately *before* os.replace is attempted:
+    # from that point the outcome must never be guessed by unlinking.
+    published = False
     try:
-        fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        raise LedgerError("refusing mirror ledger update: managed temporary already exists")
-    try:
-        data = _serialize(checked)
-        offset = 0
-        while offset < len(data):
-            offset += os.write(fd, data[offset:])
-        _full_sync(fd)
-    except OSError as exc:
         try:
-            os.close(fd)
+            _write_all(fd, _serialize(checked))
+        except OSError as exc:
+            raise LedgerError("could not write mirror ledger temporary: {0}".format(exc))
         finally:
-            try:
-                temporary.unlink()
-            except OSError:
-                pass
-        raise LedgerError("could not write mirror ledger temporary: {0}".format(exc))
-    else:
-        os.close(fd)
+            os.close(fd)
+        try:
+            # Parse the durable temporary itself; serialization bugs cannot
+            # turn into a published checksum ledger.
+            _records_from_raw(temporary.read_bytes())
+        except (OSError, LedgerError) as exc:
+            raise LedgerError("mirror ledger temporary failed re-validation: {0}".format(exc))
+        published = True
+        try:
+            os.replace(str(temporary), str(path))
+            _sync_directory(path.parent)
+        except OSError as exc:
+            # Do not unlink after os.replace might have succeeded.  A leftover
+            # private temporary is safer than guessing which file is
+            # authoritative.
+            raise LedgerError("could not atomically install mirror ledger: {0}".format(exc))
+    except BaseException:
+        if not published:
+            # Only this call's freshly O_EXCL-created management temporary is
+            # removed, and only while checksums.tsv is untouched.  Interrupts
+            # and non-OSError failures are covered too.
+            _discard_unpublished_temporary(temporary)
+        raise
+
+
+@dataclass(frozen=True)
+class LedgerInspection:
+    """Result of a strictly read-only ledger examination."""
+
+    records: Dict[str, LedgerRecord]
+    repairable_tail: bool
+
+
+def _repairable_tail_records(raw: bytes) -> Optional[List[LedgerRecord]]:
+    """Return the records a tail repair would keep, or None if not repairable.
+
+    Only an invalid *unterminated final physical row* qualifies: bytes after
+    the last LF must be the failing row.  A newline-terminated bad row or a
+    middle corruption is intentionally not repairable.  This function performs
+    no I/O and changes nothing.
+    """
+    if raw.endswith(b"\n") or b"\n" not in raw:
+        return None
+    prefix = raw.rsplit(b"\n", 1)[0] + b"\n"
     try:
-        # Parse the durable temporary itself; serialization bugs cannot turn
-        # into a published checksum ledger.
-        _records_from_raw(temporary.read_bytes())
-        os.replace(str(temporary), str(path))
-        _sync_directory(path.parent)
-    except (OSError, LedgerError) as exc:
-        # Do not unlink after os.replace might have succeeded.  A leftover
-        # private temporary is safer than guessing which file is authoritative.
-        raise LedgerError("could not atomically install mirror ledger: {0}".format(exc))
+        return _records_from_raw(prefix)
+    except LedgerError:
+        return None
 
 
-def load_ledger(destination_root: Path, *, repair_tail: bool = False, log_dir: Optional[Path] = None) -> Dict[str, LedgerRecord]:
+def _read_ledger_bytes(path: Path) -> Optional[bytes]:
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise LedgerError("could not read ledger: {0}".format(exc))
+
+
+def inspect_ledger(destination_root: Path, *, allow_repairable_tail: bool = False) -> LedgerInspection:
+    """Examine the ledger without ever writing, repairing, or creating a file.
+
+    This is the read-only preflight counterpart of :func:`load_ledger`.  It is
+    used before the destination lock exists, so it must not modify management
+    state.  With ``allow_repairable_tail`` a ledger whose only defect is an
+    unterminated final row is reported as ``repairable_tail`` together with the
+    records a later, lock-protected repair would keep; the caller may plan from
+    them but the repair itself still happens only in :func:`load_ledger`.
+    Every other defect raises, exactly as the default read does.
+    """
+    path = ledger_path(destination_root)
+    raw = _read_ledger_bytes(path)
+    if raw is None:
+        return LedgerInspection({}, False)
+    try:
+        records = _records_from_raw(raw)
+    except LedgerError as original_error:
+        if not allow_repairable_tail:
+            raise original_error
+        complete = _repairable_tail_records(raw)
+        if complete is None:
+            raise original_error
+        return LedgerInspection({record.path: record for record in complete}, True)
+    return LedgerInspection({record.path: record for record in records}, False)
+
+
+def load_ledger(destination_root: Path, *, repair_tail: bool = False, log_dir: Optional[Path] = None,
+                allow_stale_temporary: bool = False) -> Dict[str, LedgerRecord]:
     """Read and strictly validate the ledger, optionally repairing a bad tail.
 
     Only an invalid *unterminated final physical row* is repairable.  Every
     other syntax/semantic error, including a bad row in the middle, fails with
     no modification.  ``log_dir`` is mandatory for repair because a durable
     original backup is a precondition to changing the management file.
+
+    ``allow_stale_temporary`` affects the repair write only and must be set
+    solely by a caller holding the destination's exclusive lock (import).  It
+    discards a leftover ``checksums.tsv.repair.part`` and logs the removal;
+    read-only callers such as ``photo-verify`` keep the refusing default.
     """
     path = ledger_path(destination_root)
-    try:
-        raw = path.read_bytes()
-    except FileNotFoundError:
+    raw = _read_ledger_bytes(path)
+    if raw is None:
         return {}
-    except OSError as exc:
-        raise LedgerError("could not read ledger: {0}".format(exc))
     try:
         records = _records_from_raw(raw)
     except LedgerError as original_error:
         # A partial CSV field is only accepted as a tail if bytes after the
         # final LF constitute the failed final row.  This intentionally does
         # not repair an invalid newline-terminated row or a middle corruption.
-        if not repair_tail or log_dir is None or raw.endswith(b"\n") or b"\n" not in raw:
-            raise original_error
-        prefix = raw.rsplit(b"\n", 1)[0] + b"\n"
-        try:
-            complete = _records_from_raw(prefix)
-        except LedgerError:
+        complete = _repairable_tail_records(raw) if repair_tail and log_dir is not None else None
+        if complete is None:
             raise original_error
         _backup_original(path, log_dir)
-        _replace_records(path, complete)
+        _replace_records(path, complete, allow_stale_temporary=allow_stale_temporary)
         records = complete
     return {record.path: record for record in records}
 
 
-def append_record(destination_root: Path, record: LedgerRecord) -> bool:
+def append_record(destination_root: Path, record: LedgerRecord, *,
+                  known: Optional[Dict[str, LedgerRecord]] = None) -> bool:
     """Durably append a new record after validation.
 
     Returns ``False`` for a byte-for-byte equivalent existing entry.  A record
     for the same path but different contents is an error: changing history
     would conceal an existing archive conflict.
+
+    ``known`` is the caller's already-loaded view of the ledger.  Supplying it
+    replaces the re-read of the whole file for the duplicate check, which is
+    what makes appending N records O(N) instead of O(N^2); it may only be
+    supplied by a caller holding the destination's exclusive lock, because
+    only then is no other writer able to add a row this view is missing.  The
+    mapping is updated in place after a successful append so the caller's view
+    stays authoritative for the next call.  Without it the ledger is re-read,
+    exactly as before.
     """
     record = validate_record(record.fields())
-    existing = load_ledger(destination_root)
+    existing = load_ledger(destination_root) if known is None else known
     prior = existing.get(record.path)
     if prior is not None:
         if prior == record:
@@ -342,15 +481,20 @@ def append_record(destination_root: Path, record: LedgerRecord) -> bool:
             os.close(fd)
     except OSError as exc:
         raise LedgerError("could not append ledger record: {0}".format(exc))
+    if known is not None:
+        known[record.path] = record
     return True
 
 
-def supplement_record(destination_root: Path, *, relative_path: str, source_path: Path, captured_at: datetime, imported_at: Optional[datetime] = None) -> bool:
+def supplement_record(destination_root: Path, *, relative_path: str, source_path: Path, captured_at: datetime,
+                      imported_at: Optional[datetime] = None,
+                      known: Optional[Dict[str, LedgerRecord]] = None) -> bool:
     """Add an absent entry only after source and destination independently match.
 
     This is the interrupted-import recovery path.  Both files are read; it
     never assumes a destination hash is trustworthy merely because a source
-    file has gone away.
+    file has gone away.  ``known`` is passed straight to :func:`append_record`
+    and carries the same lock requirement.
     """
     _validate_relative_path(relative_path)
     destination = destination_root.absolute() / Path(*PurePosixPath(relative_path).parts)
@@ -378,4 +522,5 @@ def supplement_record(destination_root: Path, *, relative_path: str, source_path
         raise LedgerError("could not hash files for ledger supplement: {0}".format(exc))
     if source_digest != destination_digest:
         raise LedgerError("source and destination hashes differ; ledger is not supplemented")
-    return append_record(destination_root, make_record(relative_path, source_digest, source_size, captured_at, imported_at))
+    return append_record(destination_root, make_record(relative_path, source_digest, source_size, captured_at, imported_at),
+                         known=known)

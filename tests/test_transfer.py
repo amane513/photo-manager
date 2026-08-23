@@ -10,7 +10,8 @@ from unittest import mock
 from photo_manager.discovery import SourceFile, SourceKind
 from photo_manager.metadata import CaptureTime
 from photo_manager.naming import build_transfer_plans
-from photo_manager.runtime import RunResources
+from photo_manager.runtime import RunInterrupted, RunResources
+from photo_manager import transfer as transfer_module
 from photo_manager.transfer import TransferStatus, cleanup_stale_parts, management_tmp_dir, transfer_file
 
 
@@ -41,6 +42,54 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(plan.source.path.read_bytes(), plan.destination.read_bytes())
         self.assertEqual(result.digest, hashlib.sha256(plan.source.path.read_bytes()).hexdigest())
         self.assertEqual(plan.destination.stat().st_mtime_ns, original_mtime)
+        self.assertFalse(management_tmp_dir(self.archive).joinpath(plan.destination.name + ".part").exists())
+
+    def test_temporary_that_cannot_be_removed_is_a_warning_not_a_failed_copy(self):
+        plan = self.plan(content=b"published bytes")
+        part = management_tmp_dir(self.archive) / (plan.destination.name + ".part")
+        real_unlink = Path.unlink
+        synced = []
+        real_sync = transfer_module._durable_sync
+
+        def refuse_part(self_path, *args, **kwargs):
+            if self_path == part:
+                raise OSError(13, "Permission denied")
+            return real_unlink(self_path, *args, **kwargs)
+
+        def record_sync(fd, logger, *, what):
+            synced.append(what)
+            return real_sync(fd, logger, what=what)
+
+        with mock.patch.object(Path, "unlink", refuse_part), \
+                mock.patch.object(transfer_module, "_durable_sync", record_sync):
+            result = transfer_file(plan, self.archive, self.resources)
+
+        self.assertEqual(result.status, TransferStatus.COPIED)
+        self.assertEqual(result.digest, hashlib.sha256(plan.source.path.read_bytes()).hexdigest())
+        self.assertEqual(len(result.warnings), 1)
+        self.assertIn(str(part), result.warnings[0])
+        self.assertIsNone(result.message)
+        # The published file is real and durable: its directory was fsynced.
+        self.assertEqual(plan.destination.read_bytes(), plan.source.path.read_bytes())
+        self.assertIn("destination directory", synced)
+        # The temporary stays registered so the run's cleanup retries it.
+        self.assertTrue(part.exists())
+        self.resources.cleanup()
+        self.assertFalse(part.exists())
+        self.assertTrue(plan.destination.exists())
+
+    def test_a_failing_link_is_still_a_failure(self):
+        plan = self.plan(content=b"never published")
+
+        def refuse_link(*_args, **_kwargs):
+            raise OSError(5, "Input/output error")
+
+        with mock.patch.object(os, "link", refuse_link):
+            result = transfer_file(plan, self.archive, self.resources)
+
+        self.assertEqual(result.status, TransferStatus.FAILED)
+        self.assertEqual(result.warnings, ())
+        self.assertFalse(plan.destination.exists())
         self.assertFalse(management_tmp_dir(self.archive).joinpath(plan.destination.name + ".part").exists())
 
     def test_existing_final_file_is_never_replaced_when_link_races(self):
@@ -144,3 +193,58 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(result.status, TransferStatus.FAILED)
         self.assertFalse(plan.destination.exists())
         self.assertEqual(plan.source.path.read_bytes(), b"source")
+
+    def test_interrupt_during_copy_aborts_instead_of_reporting_a_failed_file(self):
+        content = b"card data" * 100
+        plan = self.plan(content=content)
+        original_open = Path.open
+        original_fdopen = os.fdopen
+        readers = []
+        writers = []
+
+        class InterruptingReader:
+            """Read one block, then behave as if SIGINT arrived mid-copy."""
+
+            def __init__(self, handle):
+                self.handle = handle
+                self.reads = 0
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.handle.close()
+                return False
+
+            def read(self, size):
+                self.reads += 1
+                if self.reads > 1:
+                    raise RunInterrupted("received SIGINT")
+                return self.handle.read(size)
+
+        def interrupting_open(path, *args, **kwargs):
+            handle = original_open(path, *args, **kwargs)
+            if path == plan.source.path:
+                reader = InterruptingReader(handle)
+                readers.append(reader)
+                return reader
+            return handle
+
+        def recording_fdopen(fd, mode, closefd=True):
+            handle = original_fdopen(fd, mode, closefd=closefd)
+            writers.append(handle)
+            return handle
+
+        with mock.patch.object(Path, "open", interrupting_open), \
+             mock.patch("photo_manager.transfer.os.fdopen", side_effect=recording_fdopen):
+            with self.assertRaises(RunInterrupted):
+                transfer_file(plan, self.archive, self.resources, chunk_size=64)
+        part = management_tmp_dir(self.archive).joinpath(plan.destination.name + ".part")
+        self.assertFalse(plan.destination.exists())
+        self.assertTrue(part.exists())
+        self.assertTrue(all(reader.handle.closed for reader in readers))
+        self.assertTrue(writers and all(handle.closed for handle in writers))
+        self.resources.cleanup()
+        self.assertFalse(part.exists())
+        self.assertFalse(plan.destination.exists())
+        self.assertEqual(plan.source.path.read_bytes(), content)

@@ -15,7 +15,7 @@ import stat
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from .naming import PlannedAction, TransferPlan
 from .runtime import OperationalError, RunResources
@@ -38,6 +38,11 @@ class TransferResult:
 
     A ``CONFLICT`` outcome means no destination was replaced; the caller must
     re-run duplicate/numbering planning before deciding what to do next.
+
+    ``message`` explains a non-success outcome.  ``warnings`` is separate on
+    purpose: it carries problems that did **not** prevent the copy, so a
+    caller can count them as warnings without ever reading a success as a
+    failure or a failure as a success.
     """
 
     status: TransferStatus
@@ -45,6 +50,7 @@ class TransferResult:
     destination: Path
     digest: Optional[str] = None
     message: Optional[str] = None
+    warnings: Tuple[str, ...] = ()
 
     @property
     def needs_replan(self) -> bool:
@@ -232,15 +238,26 @@ def transfer_file(
         except FileExistsError:
             _safe_unlink_created_part(part, resources, log)
             return TransferResult(TransferStatus.CONFLICT, plan.source.path, destination, copied_digest, "final destination appeared during transfer")
-        part.unlink()
-        resources.unregister_part_file(part)
+        # The final name now holds verified content, so the copy has already
+        # succeeded.  Failing to remove our own temporary afterwards is a
+        # cleanup problem, not a copy failure: reporting FAILED here would
+        # also withhold the ledger record for an already published file.
+        warnings: Tuple[str, ...] = ()
+        try:
+            part.unlink()
+        except OSError as exc:
+            # Left registered on purpose, so the run's cleanup retries it.
+            warnings = ("copied file was published but its managed temporary remains: {0}: {1}".format(part, exc),)
+            log.warning("Published %s but could not remove %s: %s", destination, part, exc)
+        else:
+            resources.unregister_part_file(part)
 
         directory_fd = os.open(str(destination.parent), os.O_RDONLY)
         try:
             _durable_sync(directory_fd, log, what="destination directory")
         finally:
             os.close(directory_fd)
-        return TransferResult(TransferStatus.COPIED, plan.source.path, destination, copied_digest)
+        return TransferResult(TransferStatus.COPIED, plan.source.path, destination, copied_digest, warnings=warnings)
     except FileExistsError:
         # This can only be the O_EXCL temp creation collision.  It is not ours
         # to delete, and final data has not been touched.

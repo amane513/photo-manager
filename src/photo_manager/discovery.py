@@ -1,6 +1,6 @@
 """Read-only discovery of importable files on a camera card.
 
-Only the four paths documented in ``requirements.md`` are ever returned.
+Only the four paths documented in ``docs/specification/import.md`` are ever returned.
 In particular this module has no filesystem mutation calls: an SD card is an
 input, not a workspace.
 """
@@ -111,12 +111,10 @@ def discover_files(source_root: Path) -> DiscoveryResult:
     for xml in xml_paths:
         xml_by_parent_and_name.setdefault((xml.parent, xml.name.casefold()), []).append(xml)
     paired_xmls = set()
-    rejected_videos = set()
     for video in video_paths:
         expected = video.stem.casefold() + "m01.xml"
         candidates = xml_by_parent_and_name.get((video.parent, expected), [])
         if len(candidates) > 1:
-            rejected_videos.add(video)
             failures.append(DiscoveryIssue(video, "multiple sidecar XML files match this MP4"))
             for candidate in candidates:
                 failures.append(DiscoveryIssue(candidate, "ambiguous sidecar XML; MP4 was not planned"))

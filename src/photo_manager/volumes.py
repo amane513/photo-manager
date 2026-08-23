@@ -56,14 +56,41 @@ def validate_volume(path: Path, expected_uuid: str, **kwargs: object) -> VolumeI
     return info
 
 
+def _discard_probe(path: Path) -> None:
+    """Best-effort removal of a probe file this process just created."""
+    try:
+        path.unlink()
+    except OSError:
+        # Never mask the failure or interruption which is already unwinding.
+        pass
+
+
+def _discard_probe_directory(directory: Path) -> None:
+    """Remove a directory only if this process created it and it is empty."""
+    try:
+        directory.rmdir()
+    except OSError:
+        # A concurrent run may already own content here; leave it alone.
+        pass
+
+
 def ensure_writable(destination: Path) -> None:
     """Perform a real exclusive create/unlink probe on the destination only."""
     probe = destination / ".photo-manager-write-probe-{0}".format(uuid.uuid4().hex)
     try:
         fd = os.open(str(probe), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        os.close(fd)
     except OSError as exc:
         raise UsageError("destination is not writable: {0}: {1}".format(destination, exc))
+    try:
+        os.close(fd)
+    except OSError as exc:
+        _discard_probe(probe)
+        raise UsageError("destination is not writable: {0}: {1}".format(destination, exc))
+    except BaseException:
+        # Includes RunInterrupted: the probe file this call created must not
+        # survive a failed or interrupted preflight.
+        _discard_probe(probe)
+        raise
     try:
         probe.unlink()
     except OSError as exc:
@@ -77,7 +104,14 @@ def ensure_exiftool(exiftool: Path) -> None:
 
 
 def ensure_hard_links(destination: Path) -> None:
-    """Verify the exact primitive used for safe finalisation, leaving no files."""
+    """Verify the exact primitive used for safe finalisation, leaving no files.
+
+    This runs before the destination lock is taken, so it must be invisible in
+    every outcome: success, failure and interruption all remove the probe files
+    and any directory this call itself created.  Directories which already
+    existed are never removed; they may hold another process's lock or a
+    previous run's recovery data.
+    """
     management = destination / "_photo-manager"
     tmp = management / "tmp"
     made_management = not management.exists()
@@ -88,38 +122,24 @@ def ensure_hard_links(destination: Path) -> None:
         raise UsageError("cannot create destination management directory: {0}".format(exc))
     source = tmp / ".hard-link-probe-{0}".format(uuid.uuid4().hex)
     linked = tmp / ".hard-link-probe-link-{0}".format(uuid.uuid4().hex)
-    supported = False
     try:
-        fd = os.open(str(source), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        os.close(fd)
-        os.link(str(source), str(linked))
-        supported = True
-    except OSError as exc:
-        raise UsageError("destination does not support required hard links: {0}".format(exc))
+        try:
+            fd = os.open(str(source), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except OSError as exc:
+            raise UsageError("destination does not support required hard links: {0}".format(exc))
+        try:
+            os.close(fd)
+            os.link(str(source), str(linked))
+        except OSError as exc:
+            raise UsageError("destination does not support required hard links: {0}".format(exc))
     finally:
+        # Runs for success, UsageError and interruption alike.
         for candidate in (linked, source):
-            try:
-                candidate.unlink()
-            except FileNotFoundError:
-                pass
-            except OSError:
-                # Do not hide a hard-link failure.  A leftover probe is safer
-                # than attempting broad cleanup in a user-owned directory.
-                pass
-        # A failed probe must not leave a new management tree behind.  Existing
-        # directories are intentionally retained: they may contain another
-        # process's lock or recovery data.
-        if not supported:
-            if made_tmp:
-                try:
-                    tmp.rmdir()
-                except OSError:
-                    pass
-            if made_management:
-                try:
-                    management.rmdir()
-                except OSError:
-                    pass
+            _discard_probe(candidate)
+        if made_tmp:
+            _discard_probe_directory(tmp)
+        if made_management:
+            _discard_probe_directory(management)
 
 
 def ensure_capacity(destination: Path, required_bytes: int, margin: float) -> None:
