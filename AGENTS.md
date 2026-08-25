@@ -30,7 +30,7 @@ CodexとClaude Codeが共有する指示をこのファイルに記載する。
 - 説明部分は英小文字のkebab-caseとする。
 - 完了・保留などの状態はフォルダ名に含めず、`plan.md` に記録する。
 - 完了したプランも削除せずに残す。
-- 一覧は [docs/plans/future_plans.md](docs/plans/future_plans.md) に反映する。
+- 一覧は [docs/plans/roadmap.md](docs/plans/roadmap.md) に反映する。
 
 詳細は [docs/plans/README.md](docs/plans/README.md) を参照する。
 

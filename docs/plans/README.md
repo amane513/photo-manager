@@ -2,7 +2,7 @@
 
 変更ごとに、次の形式でフォルダを追加する。
 
-実施済みと今後予定しているプランの一覧は、[future_plans.md](future_plans.md)を参照する。
+実施済みと今後予定しているプランの一覧、依存関係、着手順は、[roadmap.md](roadmap.md)を参照する。
 
 ```text
 NNNN_short-description/
