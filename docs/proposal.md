@@ -73,12 +73,10 @@ iPhone ─────────┘       │
     └── 2026/
         ├── 2026-08/
         │   ├── camera/
-        │   ├── smartphone/
-        │   └── edited/
+        │   └── smartphone/
         └── 2026-08-10_summer-trip/
             ├── camera/
-            ├── smartphone/
-            └── edited/
+            └── smartphone/
 ```
 
 - `PhotoInbox/current/` は今回の取り込みだけを置く一時領域とする。
@@ -96,16 +94,14 @@ iPhone ─────────┘       │
     │   ├── camera/
     │   │   ├── DSC00001.ARW
     │   │   ├── DSC00001.JPG
-    │   │   └── DSC00001.ARW.xmp
+    │   │   ├── DSC00001.ARW.xmp
+    │   │   └── DSC00001_edit.jpg
     │   ├── smartphone/
     │   │   ├── IMG_0001.HEIC
     │   │   └── IMG_0001.MOV
-    │   └── edited/
-    │       └── DSC00001_edit.jpg
     └── 2026-08-10_summer-trip/
         ├── camera/
-        ├── smartphone/
-        └── edited/
+        └── smartphone/
 ```
 
 #### イベントを月フォルダと同じ階層にする判断
@@ -127,15 +123,19 @@ iPhone ─────────┘       │
 
 機種名ではなく役割名を使う。カメラやスマートフォンを買い替えてもフォルダ構成が変わらず、年をまたいだ検索や自動化ルールを維持できる。複数台を同時利用するようになった場合だけ、`camera/sony-a7c2/` のように1階層追加する。
 
-#### 現像後のファイルを `edited/` に分ける理由
+#### 現像後のJPEGを `camera/` に置く判断
 
-`edited/` に置くのは現像済みJPEGだけであり、RAWやカメラ撮って出しJPEGを作業後に別フォルダへ移すという意味ではない。分ける目的は次の3点である。
+現像済みJPEGは、その元になるRAW、XMP、撮って出しJPEGと同じ `camera/` に置く。ファイル名へ `_edit` を付けるため、撮って出しJPEGとの上書きや取り違えを防げる。
 
-- カメラ生成のJPEGと、人が調整した完成版を明確に区別する。
-- 同じ写真の撮って出し版と現像版が存在しても、上書きや取り違えを防ぐ。
-- 完成版だけを探す、渡す、再書き出しする作業を簡単にする。
+```text
+camera/
+├── DSC00001.ARW
+├── DSC00001.ARW.xmp
+├── DSC00001.JPG
+└── DSC00001_edit.jpg
+```
 
-技術的には必須ではなく、`camera/DSC00001_edit.jpg` のように接尾辞だけで区別することもできる。ただし `edited/` は固定の1フォルダを増やすだけで意味が明確なため、最終案では残す。現像済みJPEGは再生成可能な派生物だが、再現の手間を避けるため原本と同様に主HDD・第2 HDD・Amazon Photosへ保存する。
+この構成では、1枚の写真に関係するファイルを1か所で確認できる。現像済みJPEGだけをまとめて探す必要が継続的に生じた場合に限り、将来 `edited/` の追加を検討する。現像済みJPEGは再生成可能な派生物だが、再現の手間を避けるため原本と同様に主HDD・第2 HDD・Amazon Photosへ保存する。
 
 ### 4.3 Ubuntu内蔵SSD
 
@@ -160,7 +160,7 @@ iPhone ─────────┘       │
 2. コピーしたファイル数を確認する。Live Photoは静止画とMOVの組を維持する。
 3. Finder、Quick Look、QuickTime Playerを使い、まずJPEG・HEIC・動画を手作業で選別する。
 4. 不採用写真は、同じベース名のRAW、JPEG、XMP、Live PhotoのMOVを組で削除する。
-5. 重要な写真だけdarktableでRAW現像し、フル解像度・sRGBのJPEGを `edited/` へ書き出す。
+5. 重要な写真だけdarktableでRAW現像し、フル解像度・sRGBのJPEGを `camera/` へ `_edit` 接尾辞付きで書き出す。
 6. darktableのXMPサイドカーはRAWと一緒に保存する。
 7. 保存先の月またはイベントを決め、`ReadyForArchive/` へ移す。
 
@@ -335,7 +335,7 @@ darktableの操作やRAW+JPEGの管理が継続的な負担になった場合に
 [ ] SDカード／iPhoneからPhotoInboxへ取り込んだ
 [ ] ファイル数とLive Photoの組を確認した
 [ ] 不要な写真・動画と対応するRAW／XMP／MOVを削除した
-[ ] 必要なRAWを現像し、editedへJPEGを書き出した
+[ ] 必要なRAWを現像し、cameraへ`_edit`付きJPEGを書き出した
 [ ] ReadyForArchiveの月／イベント分類を確認した
 [ ] 主HDDへ今回分を追加コピーした
 [ ] ファイル数・容量・代表ファイルを確認した
@@ -375,6 +375,6 @@ darktableの操作やRAW+JPEGの管理が継続的な負担になった場合に
 
 まず、Macで選別し、Ubuntuの主HDDへ保存し、静止画をAmazon Photosへ送り、第2 HDDへバックアップする一連の流れを手作業で確立する。その後にImmichをread-onlyで接続し、RAWを除外して閲覧する。
 
-フォルダはMac側を2段階に留め、保存先では月フォルダと大イベントを同じ階層に置き、機器名には `camera` / `smartphone` を使う。現像済みJPEGだけは、撮って出しとの区別が明確になるため `edited/` に分ける。
+フォルダはMac側を2段階に留め、保存先では月フォルダと大イベントを同じ階層に置き、機器名には `camera` / `smartphone` を使う。現像済みJPEGは元RAWと同じ `camera/` に置き、`_edit` 接尾辞で区別する。
 
 この運用を数回繰り返してから、コピー、検証、バックアップ、DBダンプの順に必要な部分だけを自動化する。
