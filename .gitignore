@@ -1,4 +1,9 @@
 .DS_Store
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
 
 # 秘密情報はコミットしない。ホスト固有の値は scripts/hosts/*.env に置く。
 scripts/hosts/*.secret.env

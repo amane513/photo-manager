@@ -25,7 +25,7 @@
 | 範囲 | 状態 | 対応プラン |
 |---|---|---|
 | 主HDDのマウント・権限・SMB共有 | 整備済み | [0005](../plans/0005_primary-storage-setup/plan.md) |
-| SSH・rsyncによる取り込みCLIの導入 | 未整備 | 0006 |
+| SSH・rsyncによる取り込みCLIの導入 | 整備中（実機検証前） | 0006 |
 | 第2 HDDへのバックアップ | 未整備 | 0010 |
 | Immichの導入 | 未整備 | 0011 |
 | Amazon Photos Desktopの設定 | 未整備 | 0008 |

@@ -85,4 +85,22 @@ sudo ./scripts/ubuntu/verify-primary-storage.sh \
 
 未マウント時のマウントポイントがroot所有・0755であり、写真保存用アカウントが書き込めないことを確認する。検査が失敗した場合は再マウントせず原因を修正する。
 
-SSH・rsyncによる取り込みの受入れ手順は0006で追加する。Immichは0011、第2 HDDへのバックアップは0010で追加する。
+### 7. コピー受信環境を整備する
+
+rsync over SSHの受信に必要なrsyncと、撮影日時の確認に使うExifToolを導入する。Ubuntuではapt標準のrsync 3.2.6を前提とし、より新しい版への更新は行わない。
+
+```sh
+sudo ./scripts/ubuntu/setup-copy-receiver.sh --dry-run
+sudo ./scripts/ubuntu/setup-copy-receiver.sh
+```
+
+スクリプトは不足する `rsync` と `libimage-exiftool-perl` だけを導入する。既に導入済みのパッケージを更新・再インストールしない。
+
+### 8. コピー受信環境を検査する
+
+```sh
+sudo ./scripts/ubuntu/verify-copy-receiver.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+```
+
+この検査は主HDDのUUID・マウント・写真保存アカウントの書込み権限、rsync、ExifToolを確認する。SSH鍵の登録と、Macからの接続確認は手動で行う。Immichは0011、第2 HDDへのバックアップは0010で追加する。

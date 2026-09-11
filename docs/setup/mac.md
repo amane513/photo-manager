@@ -14,4 +14,32 @@ SDカードとiPhoneからの取り込み、必要時の選別・現像、Amazon
 
 ## 手順
 
-未整備である。rsync over SSHを使う取り込みCLIの導入とSSH接続設定の再構築手順は0006、Amazon Photos Desktopの設定は0008の実施時に追加する。SMBマウントは取り込みに使わず、Amazon Photosと必要時の参照用とする。
+### 1. 外部で管理するrsyncを確認する
+
+rsyncはdotfilesで管理する。Homebrew版のrsync 3系がPATHから検出できることを確認する。photo-managerのスクリプトはrsyncを導入・更新しない。
+
+```sh
+command -v rsync
+rsync --version
+```
+
+### 2. dry-runを確認してコピーCLIを導入する
+
+ExifToolはphoto-managerの構築対象である。スクリプトはExifToolがなければHomebrewで導入するが、既存のExifToolを更新・再インストールしない。Python 3.10以上の `.venv/` を作り、CLIをeditable導入する。
+
+```sh
+./scripts/mac/setup-copy-cli.sh --dry-run
+./scripts/mac/setup-copy-cli.sh
+```
+
+導入にはHomebrewとPython 3.10以上が必要である。Homebrew自体の導入、SSH鍵の作成・Ubuntuへの登録は、自動化せず事前に行う。
+
+### 3. Macの実行環境を検査する
+
+```sh
+./scripts/mac/verify-copy-cli.sh
+```
+
+この検査はPython、venv内の `photo-copy`、PATH上のrsyncとExifToolを確認する。SSH接続先と実メディアを使う転送確認は、CLI実装後に0006の実機検証として行う。
+
+Amazon Photos Desktopの設定は0008で追加する。SMBマウントは取り込みに使わず、Amazon Photosと必要時の参照用とする。

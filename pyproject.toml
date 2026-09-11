@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "photo-copy"
+version = "0.1.0"
+description = "写真・動画を安全に配置するコピーCLI"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+photo-copy = "photo_copy.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
