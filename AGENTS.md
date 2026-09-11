@@ -5,10 +5,12 @@ CodexとClaude Codeが共有する指示をこのファイルに記載する。
 ## プロジェクト概要
 
 写真・動画管理環境（Sony α7C II、iPhone 13、MacBook Air、Ubuntu常時稼働PC + Immich、4TB HDD、Amazon Photos）の
-要件・構成・変更計画を管理するドキュメントリポジトリ。現時点でアプリケーションコードは含まない。
+要件・構成・変更計画を管理するリポジトリ。現時点のコードは環境構築スクリプトだけであり、取り込みCLIなどのアプリケーションコードは含まない。
 
 - [docs/requirements.md](docs/requirements.md): 実現したいことと前提条件（正本）
 - [docs/proposal.md](docs/proposal.md): 現在採用している構成と運用の提案（正本）
+- [docs/setup/](docs/setup/): 新しいPCで環境を再構築するための手順（正本）
+- [scripts/](scripts/): 環境構築を自動化するスクリプト
 - [docs/plans/](docs/plans/): 変更単位の目的・範囲・手順・完了条件
 - [docs/archive/](docs/archive/): 現在の正本ではない検討案や過去の資料
 
@@ -34,6 +36,20 @@ CodexとClaude Codeが共有する指示をこのファイルに記載する。
 - 一覧は [docs/plans/roadmap.md](docs/plans/roadmap.md) に反映する。
 
 詳細は [docs/plans/README.md](docs/plans/README.md) を参照する。
+
+## 再構築性
+
+新しいPCで同じ環境を組み直せる状態を保つ。手順の正本は `docs/setup/`、実体は `scripts/` に置く。
+
+- 環境を変更するプランは、`docs/setup/` と `scripts/` の更新までを成果物に含める。
+- 作業後に手順を清書するのではなく、作業時にスクリプトを書いて実行する。実機で動かしていないスクリプトを完成として扱わない。
+- スクリプトは冪等とし、dry-runを備え、既存の設定やデータを無断で上書きしない。失敗を成功として扱わない。
+- 完了条件は可能な限り確認用スクリプトにし、再構築先で同じ状態になったことを判定できるようにする。
+- 物理作業やGUIアプリの操作など自動化できない部分は、`docs/setup/` に手動手順として明記する。
+- ホスト固有の値は `scripts/hosts/*.env` に分離し、スクリプトへ直書きしない。パスワード等の秘密情報はコミットせず実行時に入力する。
+- `plan.md` と `validation.md` は当時の記録であり、再構築の手順としては使わない。
+
+詳細は [docs/setup/README.md](docs/setup/README.md) を参照する。
 
 ## 設定の保守
 
