@@ -26,3 +26,24 @@ scripts/
 HDDのUUID、マウント先、共有名、利用アカウントなどは `hosts/<host-name>.env` に置き、スクリプトへ直書きしない。スクリプトは対象ホストのファイルを読み込んで動作する。
 
 パスワード等の秘密情報はコミットせず、実行時に入力する。
+
+## 0005: 主HDDとSMB共有
+
+Ubuntuでは次の順に実行する。実行には対象ホスト上でのsudo認証が必要である。
+
+```sh
+sudo ./scripts/ubuntu/setup-primary-storage.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --dry-run
+
+sudo ./scripts/ubuntu/setup-primary-storage.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --adopt-existing-share
+
+sudo ./scripts/ubuntu/verify-primary-storage.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+```
+
+`--adopt-existing-share` は、手動で作成済みの同名共有を初めてこのスクリプトの管理へ移す場合だけ指定する。設定変更前に `/etc/fstab` と `/etc/samba/smb.conf` の日時付きバックアップを作る。既存のマウント定義や共有と値が競合する場合は停止し、無断で置き換えない。
+
+`verify-unmounted-primary-storage.sh` は、通常検証と分けて、HDDを安全にアンマウントした直後だけ実行する。詳細な実行順は [docs/setup/ubuntu.md](../docs/setup/ubuntu.md) を参照する。
