@@ -52,7 +52,7 @@ iPhone ─ イメージキャプチャ ─> Mac: PhotoWork ─> 主HDD
 
 ### 4.1 Macと主HDD
 
-Macの `~/Pictures/PhotoWork/` とHDDの `/srv/photo-library/` 以下を、同じ相対構成とする。
+Macの `~/Pictures/PhotoWork/` とHDDの `/mnt/camera_archive/` 以下を、同じ相対構成とする。
 
 ```text
 <ルート>/
@@ -89,7 +89,7 @@ SSDにはOS、Docker、Immich、PostgreSQL、サムネイル、モデル、変�
 └── profile/
 ```
 
-`/srv/photo-library/` は配置案であり、0005でHDDのマウント・共有と対応づける。未マウント時にSSDやMacのローカルディレクトリへ誤書込みしないようにする。
+`/mnt/camera_archive/` は配置案であり、0005でHDDのマウント・共有と対応づける。未マウント時にSSDやMacのローカルディレクトリへ誤書込みしないようにする。
 
 ## 5. 操作と自動化
 
@@ -156,7 +156,7 @@ iCloud+は採用しない。取り込み前のiPhone本体が唯一のコピー�
 
 - Ubuntu 64-bit上でDocker Composeを使う。
 - PostgreSQLとImmichの作業データは内蔵SSDへ置く。
-- `/srv/photo-library` をコンテナへ読み取り専用でマウントする。
+- `/mnt/camera_archive` をコンテナへ読み取り専用でマウントする。
 - Upload LibraryではなくExternal Libraryを主に使う。
 - Immichから原本の削除・整理を行わない。
 - 初期は家庭内LANだけで利用し、ルーターからImmichのポートを直接公開しない。
@@ -165,7 +165,7 @@ iCloud+は採用しない。取り込み前のiPhone本体が唯一のコピー�
 
 ```yaml
 volumes:
-  - /srv/photo-library:/external/photo-library:ro
+  - /mnt/camera_archive:/external/photo-library:ro
 ```
 
 ### 7.2 RAW除外
@@ -217,7 +217,7 @@ External Libraryの除外パターンに次を設定する。
 
 最低限の対象は次のとおり。
 
-- `/srv/photo-library` 全体
+- `/mnt/camera_archive` 全体
 - ImmichのPostgreSQLダンプ
 - Docker Composeファイルと `.env`
 - Immichプロフィール等、原本やDBから再生成できないデータ
