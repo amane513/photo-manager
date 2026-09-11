@@ -40,6 +40,37 @@ ExifToolはphoto-managerの構築対象である。スクリプトはExifToolが
 ./scripts/mac/verify-copy-cli.sh
 ```
 
-この検査はPython、venv内の `photo-copy`、PATH上のrsyncとExifToolを確認する。SSH接続先と実メディアを使う転送確認は、CLI実装後に0006の実機検証として行う。
+この検査はPython、venv内の `photo-copy`、PATH上のrsyncとExifToolを確認する。
+
+### 4. ローカルコピーを試験する
+
+0006の現時点では、`local` 転送だけを実装している。実写真や既存のライブラリを使わず、一時ディレクトリへ小さな試験ファイルを作成して確認する。コピー元は変更・削除されず、保存先は撮影日時のメタデータを取得できたファイルだけで構成される。
+
+```sh
+trial_root="$(mktemp -d)"
+mkdir -p "$trial_root/source/DCIM"
+cp /path/to/a-small-test-file.jpg "$trial_root/source/DCIM/"
+
+.venv/bin/photo-copy copy \
+  --source "$trial_root/source" \
+  --destination-root "$trial_root/destination" \
+  --year-month 2026-09 \
+  --device camera \
+  --transport local \
+  --dry-run \
+  --log-dir "$trial_root/logs"
+```
+
+通常実行では `--dry-run` を外す。保存先は次の形式である。SDカードの `DCIM/` などの内部階層は持ち込まない。
+
+```text
+<保存先ルート>/2026/2026-09/camera/20260911-143052_<原名>
+```
+
+コマンドは要約を表示し、詳細を `--log-dir` のJSONファイルへ保存する。`--log-dir` を指定しない場合は、実行時のカレントディレクトリに `.photo-copy-logs/` を作成する。衝突、失敗、未処理がなければ終了コードは0であり、いずれかがあれば1である。引数や転送種別が不正で実行できない場合は2である。
+
+ARW/JPEG/XMPの組はARW、HEIC/MOVの組はHEICの撮影日時を全ファイルへ適用する。基準ファイルがない、または基準ファイルから日時を取得できない組はコピーせず、コピー元を保持したまま未処理としてログへ記録する。未対応形式や日時を取得できない単体ファイルも同様である。
+
+`rsync-ssh` 転送は未実装であり、指定すると終了コード2で停止する。SSH接続先や実メディアを使う転送確認は、この転送層を実装してから隔離した試験先で行う。
 
 Amazon Photos Desktopの設定は0008で追加する。SMBマウントは取り込みに使わず、Amazon Photosと必要時の参照用とする。
