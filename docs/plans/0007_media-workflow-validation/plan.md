@@ -8,7 +8,7 @@
 
 ## 目的
 
-RAW+JPEG、Live Photo、通常動画をCLIで配置し、MacとSMB上のHDDで開けることを確認する。選別・現像は通常の取り込みに必須とせず、使うときに必要な操作だけ確認する。
+RAW+JPEG、Live Photo、通常動画をCLIでMacまたはrsync over SSH経由の主HDDへ配置し、MacとSMB参照時の主HDDで開けることを確認する。選別・現像は通常の取り込みに必須とせず、使うときに必要な操作だけ確認する。
 
 ## 方針変更
 
@@ -16,7 +16,7 @@ RAW+JPEG、Live Photo、通常動画をCLIで配置し、MacとSMB上のHDDで�
 
 ## 対象範囲と前提
 
-- 0006のCLIで、MacまたはSMB上のHDDへ少数のサンプルを配置する。両ルート以下は `YYYY/YYYY-MM/camera/` または `smartphone/` とする。
+- 0006のCLIで、Macまたはrsync over SSH経由の主HDDへ少数のサンプルを配置する。両ルート以下は `YYYY/YYYY-MM/camera/` または `smartphone/` とする。配置後の主HDDを開く確認にはSMBを使ってよい。
 - 実機試験は既存データと衝突しない試験先で行う。試験用の隔離は検証時だけのもので、日常のHDD構成に作業領域を追加するものではない。
 - iPhoneの取得はイメージキャプチャを使い、その後の配置をCLIで行う。
 - SD・iPhone・Google Photos等のコピー元は保持する。削除試験は今回のテストコピーだけで行う。

@@ -6,8 +6,8 @@
 
 ## ホスト別の手順
 
-- [ubuntu.md](ubuntu.md): 常時稼働PC。主HDDのマウントと共有、Immich、第2 HDDへのバックアップ。
-- [mac.md](mac.md): MacBook Air。取り込みと現像のツール、SMBマウント、取り込みCLI、Amazon Photos。
+- [ubuntu.md](ubuntu.md): 常時稼働PC。主HDDのマウントと共有、SSH・rsyncの受入れ、Immich、第2 HDDへのバックアップ。
+- [mac.md](mac.md): MacBook Air。取り込みと現像のツール、SSH・rsyncの送信設定、SMBマウント、取り込みCLI、Amazon Photos。
 
 入れ替える側のホストの手順だけを実行する。両方を同時に組み直す場合は、Ubuntu側を先に整えてからMac側を接続する。
 
@@ -25,7 +25,7 @@
 | 範囲 | 状態 | 対応プラン |
 |---|---|---|
 | 主HDDのマウント・権限・SMB共有 | 整備済み | [0005](../plans/0005_primary-storage-setup/plan.md) |
-| 取り込みCLIの導入 | 未整備 | 0006 |
+| SSH・rsyncによる取り込みCLIの導入 | 未整備 | 0006 |
 | 第2 HDDへのバックアップ | 未整備 | 0010 |
 | Immichの導入 | 未整備 | 0011 |
 | Amazon Photos Desktopの設定 | 未整備 | 0008 |

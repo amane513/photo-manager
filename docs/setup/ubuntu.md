@@ -68,7 +68,7 @@ sudo ./scripts/ubuntu/verify-primary-storage.sh \
 
 ### 5. MacからSMBを確認する
 
-Finderで `smb://<UbuntuのIPアドレス>/CameraArchive` に接続し、`amane-yajima` で認証する。テストファイルを作成、開き、削除してUbuntu側でも反映を確認する。日常の保存先はこの共有だけとする。
+Finderで `smb://<UbuntuのIPアドレス>/CameraArchive` に接続し、`amane-yajima` で認証する。テストファイルを作成、開き、削除してUbuntu側でも反映を確認する。SMBはAmazon Photosと必要時のFinder・現像ツールからの参照用とし、取り込みCLIの転送には使わない。
 
 ### 6. 未マウント時の誤書込み防止を確認する
 
@@ -85,4 +85,4 @@ sudo ./scripts/ubuntu/verify-primary-storage.sh \
 
 未マウント時のマウントポイントがroot所有・0755であり、写真保存用アカウントが書き込めないことを確認する。検査が失敗した場合は再マウントせず原因を修正する。
 
-Immichは0011、第2 HDDへのバックアップは0010で追加する。
+SSH・rsyncによる取り込みの受入れ手順は0006で追加する。Immichは0011、第2 HDDへのバックアップは0010で追加する。
