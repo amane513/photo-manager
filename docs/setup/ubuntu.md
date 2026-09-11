@@ -87,7 +87,7 @@ sudo ./scripts/ubuntu/verify-primary-storage.sh \
 
 ### 7. コピー受信環境を整備する
 
-rsync over SSHの受信に必要なrsyncと、撮影日時の確認に使うExifToolを導入する。Ubuntuではapt標準のrsync 3.2.6を前提とし、より新しい版への更新は行わない。
+rsync over SSHの受信に必要なrsyncと、撮影日時の確認に使うExifToolを導入する。Ubuntuではapt標準のrsync 3.2.6以上を前提とし、より新しい版への更新は行わない。現在の実機では3.2.7を確認している。
 
 ```sh
 sudo ./scripts/ubuntu/setup-copy-receiver.sh --dry-run
