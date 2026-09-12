@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -131,3 +132,163 @@ class CopyRequestTest(unittest.TestCase):
 
             self.assertEqual(first_exit, 0)
             self.assertEqual(second_exit, 0)
+
+
+class ProfileTest(unittest.TestCase):
+    """段階5: プロファイル設定（--profile、--profile-config）の自動テスト。"""
+
+    def fake_timestamps(self, paths, tz=None):
+        return {p: "20260911-143052" for p in paths}
+
+    def test_profile_supplies_omitted_arguments(self) -> None:
+        """C21相当: --profileで指定した値が、明示していない引数の既定値になる。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg-1")
+            destination = root / "destination"
+            logs = root / "logs"
+            profile_config = root / "profiles.ini"
+            profile_config.write_text(
+                "[profile.sd-to-mac]\n"
+                f"source = {source}\n"
+                f"destination-root = {destination}\n"
+                "device = camera\n"
+                f"log-dir = {logs}\n",
+                encoding="utf-8",
+            )
+
+            with patch("photo_copy.cli.capture_timestamps", self.fake_timestamps):
+                exit_code = main(
+                    [
+                        "copy",
+                        "--profile",
+                        "sd-to-mac",
+                        "--profile-config",
+                        str(profile_config),
+                        "--year-month",
+                        "2026-09",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            target = destination / "2026" / "2026-09" / "camera" / "20260911-143052_DSC00001.JPG"
+            self.assertTrue(target.exists())
+            log = next(logs.glob("*.json"))
+            payload = json.loads(log.read_text(encoding="utf-8"))
+            self.assertEqual(payload["profile"], "sd-to-mac")
+            self.assertEqual(payload["source"], str(source))
+            self.assertEqual(payload["destination_root"], str(destination))
+            self.assertEqual(payload["device"], "camera")
+
+    def test_command_line_argument_overrides_profile_value(self) -> None:
+        """優先順位「コマンドライン引数 > プロファイル > CLIの既定値」を確認する。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg-1")
+            profile_destination = root / "from-profile"
+            override_destination = root / "from-cli"
+            logs = root / "logs"
+            profile_config = root / "profiles.ini"
+            profile_config.write_text(
+                "[profile.sd-to-mac]\n"
+                f"source = {source}\n"
+                f"destination-root = {profile_destination}\n"
+                "device = camera\n"
+                f"log-dir = {logs}\n",
+                encoding="utf-8",
+            )
+
+            with patch("photo_copy.cli.capture_timestamps", self.fake_timestamps):
+                exit_code = main(
+                    [
+                        "copy",
+                        "--profile",
+                        "sd-to-mac",
+                        "--profile-config",
+                        str(profile_config),
+                        "--destination-root",
+                        str(override_destination),
+                        "--year-month",
+                        "2026-09",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertFalse(profile_destination.exists())
+            target = override_destination / "2026" / "2026-09" / "camera" / "20260911-143052_DSC00001.JPG"
+            self.assertTrue(target.exists())
+
+    def test_unknown_profile_name_is_unrunnable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile_config = root / "profiles.ini"
+            profile_config.write_text("[profile.other]\nsource = /tmp\n", encoding="utf-8")
+
+            exit_code = main(
+                [
+                    "copy",
+                    "--profile",
+                    "does-not-exist",
+                    "--profile-config",
+                    str(profile_config),
+                    "--destination-root",
+                    str(root / "destination"),
+                    "--year-month",
+                    "2026-09",
+                    "--device",
+                    "camera",
+                ]
+            )
+
+            self.assertEqual(exit_code, 2)
+
+    def test_profile_is_not_read_without_explicit_profile_flag(self) -> None:
+        """--profile-configだけを指定しても、--profileを指定しない限りプロファイルは読まない。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            profile_config = root / "profiles.ini"
+            profile_config.write_text("[profile.unused]\nsource = /should/not/be/used\n", encoding="utf-8")
+
+            exit_code = main(
+                [
+                    "copy",
+                    "--profile-config",
+                    str(profile_config),
+                    "--destination-root",
+                    str(root / "destination"),
+                    "--year-month",
+                    "2026-09",
+                    "--device",
+                    "camera",
+                ]
+            )
+
+            # --sourceが無く、プロファイルも読まれないため実行不能になる。
+            self.assertEqual(exit_code, 2)
+
+    def test_missing_source_without_profile_is_unrunnable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            exit_code = main(
+                [
+                    "copy",
+                    "--destination-root",
+                    str(root / "destination"),
+                    "--year-month",
+                    "2026-09",
+                    "--device",
+                    "camera",
+                ]
+            )
+
+            self.assertEqual(exit_code, 2)
