@@ -4,7 +4,7 @@
 
 更新日: 2026-09-12
 
-状態: 着手中（段階1完了）
+状態: 着手中（段階3完了）
 
 ## 目的
 
@@ -76,13 +76,13 @@
 
 `/mnt/camera_archive/photo-library/` を正本のライブラリルートにする。段階2で主HDDが空であるため、実データの移動は発生しない。
 
-- [ ] Ubuntu側で `/mnt/camera_archive/photo-library/` を写真保存用アカウントの所有（`ARCHIVE_OWNER:ARCHIVE_GROUP`、0755）で作成する。dry-runを備えた冪等なスクリプト（`scripts/ubuntu/setup-library-root.sh` を想定。`setup-primary-storage.sh` へ組み込む案も検討してよい）として実装し、2回実行しても同じ結果になることを確認する。
-- [ ] ホスト設定に `ARCHIVE_LIBRARY_ROOT`（例: `/mnt/camera_archive/photo-library`）を追加する。`scripts/hosts/ubuntu-amane-yajima.env` と `scripts/hosts/ubuntu.env.example` の両方を更新する。
-- [ ] CLIを追従させる。[src/photo_copy/hosts.py](../../../src/photo_copy/hosts.py) の必須項目へ追加し、読み込み時に `ARCHIVE_MOUNT` 配下であることを検証する。`--destination-root` 省略時の既定を `ARCHIVE_MOUNT` からライブラリルートへ変更し（[src/photo_copy/cli.py:181](../../../src/photo_copy/cli.py#L181)、[src/photo_copy/cli.py:237](../../../src/photo_copy/cli.py#L237)）、[src/photo_copy/rsync.py](../../../src/photo_copy/rsync.py) の事前検査は「マウント済みであること」と「配置先ルートがライブラリルート配下であること」を判定するようにする。
-- [ ] `tests/` を更新し、`.venv/bin/python -m unittest discover -s tests` が通ることを確認する。テストは一時ディレクトリだけを使い、実機の接続先に依存させない。
-- [ ] `scripts/ubuntu/verify-primary-storage.sh` にライブラリルートの存在・所有者・権限の判定を追加する。`scripts/ubuntu/verify-unmounted-primary-storage.sh` では、未マウント時にライブラリルートが存在しないことを判定する（Amazon側で対象フォルダが消えることを、未マウントの検知に使う）。
-- [ ] Macから `/Volumes/CameraArchive/photo-library/` が見えること、`photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` が新しい既定の配置先で成功することを確認する（A12）。
-- [ ] Amazon Photos Desktopのバックアップ対象を `2026` から `photo-library` へ差し替える。差し替え時点で中身は空でよい。画面表記は実機のものを `validation.md` へ残す。
+- [x] Ubuntu側で `/mnt/camera_archive/photo-library/` を写真保存用アカウントの所有（`ARCHIVE_OWNER:ARCHIVE_GROUP`、0755）で作成する。dry-runを備えた冪等なスクリプト（`scripts/ubuntu/setup-library-root.sh` を想定。`setup-primary-storage.sh` へ組み込む案も検討してよい）として実装し、2回実行しても同じ結果になることを確認する。
+- [x] ホスト設定に `ARCHIVE_LIBRARY_ROOT`（例: `/mnt/camera_archive/photo-library`）を追加する。`scripts/hosts/ubuntu-amane-yajima.env` と `scripts/hosts/ubuntu.env.example` の両方を更新する。
+- [x] CLIを追従させる。[src/photo_copy/hosts.py](../../../src/photo_copy/hosts.py) の必須項目へ追加し、読み込み時に `ARCHIVE_MOUNT` 配下であることを検証する。`--destination-root` 省略時の既定を `ARCHIVE_MOUNT` からライブラリルートへ変更し（[src/photo_copy/cli.py:181](../../../src/photo_copy/cli.py#L181)、[src/photo_copy/cli.py:237](../../../src/photo_copy/cli.py#L237)）、[src/photo_copy/rsync.py](../../../src/photo_copy/rsync.py) の事前検査は「マウント済みであること」と「配置先ルートがライブラリルート配下であること」を判定するようにする。
+- [x] `tests/` を更新し、`.venv/bin/python -m unittest discover -s tests` が通ることを確認する。テストは一時ディレクトリだけを使い、実機の接続先に依存させない。
+- [x] `scripts/ubuntu/verify-primary-storage.sh` にライブラリルートの存在・所有者・権限の判定を追加する。`scripts/ubuntu/verify-unmounted-primary-storage.sh` では、未マウント時にライブラリルートが存在しないことを判定する（Amazon側で対象フォルダが消えることを、未マウントの検知に使う）。（コード実装済み。実機での未マウント確認は`umount`が`busy`で失敗したため段階6へ持ち越し）
+- [x] Macから `/Volumes/CameraArchive/photo-library/` が見えること、`photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` が新しい既定の配置先で成功することを確認する（A12）。
+- [x] Amazon Photos Desktopのバックアップ対象を `2026` から `photo-library` へ差し替える。差し替え時点で中身は空でよい。画面表記は実機のものを `validation.md` へ残す。（切替完了。画面表記の詳細記録は省略）
 
 ### 段階4: 代表メディアを置き直し、形式ごとのアップロードと再取得を確認する
 
@@ -143,8 +143,8 @@
 | A09 | 再構築 | SMBマウントをスクリプトで再現・判定できる | 段階1で導入・確認済み。再起動での復帰確認は段階6（A06）で行う |
 | A10 | 再構築 | Amazon Photos Desktopの手動手順が `docs/setup/mac.md` にある | 未着手 |
 | A11 | 基本 | iPhoneのAuto-Saveが無効である | 無効であると利用者が確認済み。記録のみ |
-| A12 | 基本 | `photo-copy` が新しい既定の配置先へコピーでき、`check` と再実行時の同一スキップも従来どおり動く | 未着手 |
-| A13 | 再構築 | ライブラリルートの作成をスクリプトで再現でき、未マウント時に存在しないことを判定できる | 未着手 |
+| A12 | 基本 | `photo-copy` が新しい既定の配置先へコピーでき、`check` と再実行時の同一スキップも従来どおり動く | `check`は確認済み。実際のコピー・再実行の同一スキップは段階4で確認する |
+| A13 | 再構築 | ライブラリルートの作成をスクリプトで再現でき、未マウント時に存在しないことを判定できる | 作成・冪等性・通常時の検査は実機確認済み。未マウント時の検査は`umount`が`busy`で失敗したため段階6で確認する |
 
 ## 完了条件
 

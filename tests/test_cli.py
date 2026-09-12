@@ -7,6 +7,38 @@ from unittest.mock import patch
 from photo_copy.cli import main, parse_request
 from photo_copy.models import Device, Layout, TransferKind
 
+HOST_CONFIG_CONTENT = """\
+PRIMARY_STORAGE_UUID=0574e6d5-893c-41b5-84e8-77c41c3b59c1
+PRIMARY_STORAGE_FSTYPE=ext4
+ARCHIVE_MOUNT=/mnt/camera_archive
+ARCHIVE_LIBRARY_ROOT=/mnt/camera_archive/photo-library
+ARCHIVE_OWNER=amane-yajima
+ARCHIVE_GROUP=amane-yajima
+SMB_SHARE_NAME=CameraArchive
+SMB_VALID_USER=amane-yajima
+SSH_HOST=ubuntu
+"""
+
+
+class FakeRsyncSshTransfer:
+    """実機へ接続せず、コンストラクタの引数だけを記録するフェイク。"""
+
+    last_destination_root: Path | None = None
+
+    def __init__(self, host_config, destination_root) -> None:
+        FakeRsyncSshTransfer.last_destination_root = destination_root
+        self.local_rsync_version = "rsync  version 3.5.0  protocol version 32"
+        self.remote_rsync_version = "rsync  version 3.2.7  protocol version 31"
+
+    def preflight(self) -> None:
+        return None
+
+    def ensure_directories(self, directories) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
 
 class CopyRequestTest(unittest.TestCase):
     def test_copy_request_is_parsed(self) -> None:
@@ -102,6 +134,49 @@ class CopyRequestTest(unittest.TestCase):
         exit_code = main(["check", "--host-config", "/nonexistent/ubuntu.env"])
 
         self.assertEqual(exit_code, 2)
+
+    def test_check_default_destination_root_is_library_root(self) -> None:
+        """--destination-root省略時は、ARCHIVE_MOUNTではなくARCHIVE_LIBRARY_ROOTへ落ちる。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            host_config_path = Path(directory) / "ubuntu.env"
+            host_config_path.write_text(HOST_CONFIG_CONTENT, encoding="utf-8")
+
+            with patch("photo_copy.cli.RsyncSshTransfer", FakeRsyncSshTransfer):
+                exit_code = main(["check", "--host-config", str(host_config_path)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(FakeRsyncSshTransfer.last_destination_root, Path("/mnt/camera_archive/photo-library"))
+
+    def test_copy_default_destination_root_is_library_root(self) -> None:
+        """--transport rsync-sshで--destination-rootを省略した場合も同様にライブラリルートへ落ちる。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            host_config_path = root / "ubuntu.env"
+            host_config_path.write_text(HOST_CONFIG_CONTENT, encoding="utf-8")
+
+            with patch("photo_copy.cli.RsyncSshTransfer", FakeRsyncSshTransfer):
+                exit_code = main(
+                    [
+                        "copy",
+                        "--source",
+                        str(source),
+                        "--device",
+                        "camera",
+                        "--transport",
+                        "rsync-ssh",
+                        "--host-config",
+                        str(host_config_path),
+                        "--log-dir",
+                        str(root / "logs"),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(FakeRsyncSshTransfer.last_destination_root, Path("/mnt/camera_archive/photo-library"))
 
     def test_rerun_of_fully_copied_source_exits_zero(self) -> None:
         """C20: CLI経由でも、送信済みの範囲の再実行は全件スキップで正常終了する。"""

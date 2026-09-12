@@ -28,3 +28,16 @@
 - 以降は「Amazonに存在する＝新しいライブラリルート（`photo-library`）から上がった」と一意に判定してよい状態になった。
 
 未確認事項: Amazon Photos削除前の件数（写真・動画の内訳を含む）は記録できていない。ローカルに原本がないと思われるもの（旧Macフォルダ由来等）の有無も個別確認していない。実害はない（利用者判断で全削除済み、原本は主HDD・`~/Pictures/backup/`・iPhone本体に別途ある）が、完了条件の記録としては保留として明記する。
+
+## 2026-09-13: 段階3 ライブラリルートを新設し、CLIとスクリプトを追従させる
+
+- ホスト設定に `ARCHIVE_LIBRARY_ROOT=/mnt/camera_archive/photo-library` を追加した（`scripts/hosts/ubuntu-amane-yajima.env`、`scripts/hosts/ubuntu.env.example`）。
+- `scripts/ubuntu/setup-library-root.sh` を実装し、実機で `--dry-run` → 本実行 → 本実行（2回目）の順で実行した。1回目で `install -d -o amane-yajima -g amane-yajima -m 0755 /mnt/camera_archive/photo-library` を実行して作成し、2回目は「既存のライブラリルートは設定済み」で冪等に終了した。
+- `scripts/ubuntu/verify-primary-storage.sh` にライブラリルートの存在・所有者・権限の判定を追加し、実機で `OK: 主HDD、fstab、ライブラリルート、権限、Sambaサービスを確認した。...ライブラリルート: /mnt/camera_archive/photo-library` を確認した。
+- `scripts/ubuntu/verify-unmounted-primary-storage.sh` に、未マウント時にライブラリルートが存在しないことの判定を追加した。実機での確認は、`/mnt/camera_archive` が稼働中のsmbd（Macの接続セッション）に掴まれて`umount`が`target is busy`で失敗したため、今回は見送った。Mac側から`/Volumes/CameraArchive`を切り離そうとしたが、`lsof`上は何も掴んでいないにもかかわらず`umount`・`diskutil unmount`とも`Resource busy`で失敗した（Spotlight索引等が原因の可能性）。この確認は段階6のSMB切断確認（A05）にあわせてUbuntu側のumountもまとめて行うこととし、保留とする。
+- `src/photo_copy/hosts.py` に `archive_library_root` を追加し、`ARCHIVE_LIBRARY_ROOT` を必須項目にした。`ARCHIVE_MOUNT` 配下にない場合は読み込み時に `ValueError` にする検証を追加した。
+- `src/photo_copy/cli.py` の `copy`・`check` 双方で、`--destination-root` 省略時の既定を `ARCHIVE_MOUNT` から `ARCHIVE_LIBRARY_ROOT` へ変更した。
+- `src/photo_copy/rsync.py` の事前検査を、配置先ルートが `ARCHIVE_LIBRARY_ROOT` 配下であることを判定するように変更した（`ARCHIVE_MOUNT` 直下だが `ARCHIVE_LIBRARY_ROOT` 外の旧来の年フォルダ配置は拒否する）。マウント済み判定は従来どおり `ARCHIVE_MOUNT` に対して行う。
+- `tests/` を更新し（`test_hosts.py`、`test_rsync.py`、`test_cli.py`）、`.venv/bin/python -m unittest discover -s tests` が113件すべて成功することを確認した。
+- 実機で `photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` を実行し、`OK: 接続先 ubuntu、配置先ルート /mnt/camera_archive/photo-library、...` と、新しい既定の配置先で成功することを確認した（A12）。Macから `/Volumes/CameraArchive/photo-library/` が見えることも確認した（作成直後は空）。
+- Amazon Photos Desktopのバックアップ対象を「2026」フォルダから「photo-library」フォルダへ利用者が切り替えた。切替時点で中身は空だった。画面表記の詳細記録は省略し、切替完了の事実のみを記録する。

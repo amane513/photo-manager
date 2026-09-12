@@ -22,6 +22,7 @@ def make_host_config(**overrides) -> HostConfig:
         primary_storage_uuid="0574e6d5-uuid",
         primary_storage_fstype="ext4",
         archive_mount=Path("/mnt/camera_archive"),
+        archive_library_root=Path("/mnt/camera_archive/photo-library"),
         archive_owner="amane-yajima",
         archive_group="amane-yajima",
         smb_share_name="CameraArchive",
@@ -40,7 +41,7 @@ VALID_FACTS = (
     b"OWNER=amane-yajima\n"
     b"MOUNTED=1\n"
     b"UUID=0574e6d5-uuid\n"
-    b"DESTINATION_UNDER_MOUNT=1\n"
+    b"DESTINATION_UNDER_LIBRARY_ROOT=1\n"
     b"DESTINATION_WRITABLE=1\n"
     b"RSYNC_VERSION_LINE=rsync  version 3.2.7  protocol version 31\n"
 )
@@ -79,7 +80,9 @@ class FakeRun:
         raise AssertionError(f"想定しないコマンド: {command} ({kwargs})")
 
 
-def make_transfer(run: FakeRun, destination_root: Path = Path("/mnt/camera_archive"), **host_overrides) -> RsyncSshTransfer:
+def make_transfer(
+    run: FakeRun, destination_root: Path = Path("/mnt/camera_archive/photo-library"), **host_overrides
+) -> RsyncSshTransfer:
     return RsyncSshTransfer(make_host_config(**host_overrides), destination_root, run=run, uid=999)
 
 
@@ -96,6 +99,16 @@ class PreflightTest(unittest.TestCase):
     def test_destination_root_outside_mount_is_rejected_without_ssh(self) -> None:
         run = FakeRun(remote_facts_stdout=VALID_FACTS)
         transfer = make_transfer(run, destination_root=Path("/mnt/other/test"))
+
+        with self.assertRaises(TransferUnavailable):
+            transfer.preflight()
+        self.assertEqual(run.calls, [])
+
+    def test_destination_root_under_mount_but_outside_library_root_is_rejected_without_ssh(self) -> None:
+        """主HDD配下でもライブラリルート外（例: 旧来の年フォルダ直下）は事前検査で拒否する。"""
+
+        run = FakeRun(remote_facts_stdout=VALID_FACTS)
+        transfer = make_transfer(run, destination_root=Path("/mnt/camera_archive/2026"))
 
         with self.assertRaises(TransferUnavailable):
             transfer.preflight()
@@ -355,7 +368,7 @@ class RerunViaExecuteCopyTest(unittest.TestCase):
             source.mkdir()
             content = b"jpeg-content"
             (source / "DSC00001.JPG").write_bytes(content)
-            destination_root = Path("/mnt/camera_archive")
+            destination_root = Path("/mnt/camera_archive/photo-library")
             target = destination_root / "2026" / "2026-09" / "camera" / "20260911-143052_DSC00001.JPG"
 
             request = CopyRequest(

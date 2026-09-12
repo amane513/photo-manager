@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "省略時はプロファイルのdestination-root。"
-            "--transport rsync-sshではさらに--host-configのARCHIVE_MOUNTへ落ちる。localでは必須"
+            "--transport rsync-sshではさらに--host-configのARCHIVE_LIBRARY_ROOTへ落ちる。localでは必須"
         ),
     )
     copy.add_argument(
@@ -127,7 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--destination-root",
         type=Path,
         default=None,
-        help="省略時は--host-configのARCHIVE_MOUNT",
+        help="省略時は--host-configのARCHIVE_LIBRARY_ROOT",
     )
 
     return parser
@@ -178,7 +178,7 @@ def parse_request(arguments: list[str]) -> CopyRequest:
 def _run_check(parsed: argparse.Namespace) -> int:
     try:
         host_config = load_host_config(parsed.host_config)
-        destination_root = parsed.destination_root or host_config.archive_mount
+        destination_root = parsed.destination_root or host_config.archive_library_root
         transfer = RsyncSshTransfer(host_config, destination_root)
     except ValueError as error:
         print(f"実行不能: {error}")
@@ -234,7 +234,7 @@ def _run_copy(parsed: argparse.Namespace) -> int:
             Path(profile.destination_root) if profile and profile.destination_root else None
         )
         if destination_root is None and host_config is not None:
-            destination_root = host_config.archive_mount
+            destination_root = host_config.archive_library_root
 
         request = _request_from_parsed(parsed, profile=profile, destination_root=destination_root)
         transfer = RsyncSshTransfer(host_config, request.destination_root) if host_config is not None else LocalTransfer()

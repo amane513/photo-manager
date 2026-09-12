@@ -13,6 +13,7 @@ REQUIRED_KEYS = (
     "PRIMARY_STORAGE_UUID",
     "PRIMARY_STORAGE_FSTYPE",
     "ARCHIVE_MOUNT",
+    "ARCHIVE_LIBRARY_ROOT",
     "ARCHIVE_OWNER",
     "ARCHIVE_GROUP",
     "SMB_SHARE_NAME",
@@ -28,6 +29,7 @@ class HostConfig:
     primary_storage_uuid: str
     primary_storage_fstype: str
     archive_mount: Path
+    archive_library_root: Path
     archive_owner: str
     archive_group: str
     smb_share_name: str
@@ -68,10 +70,16 @@ def load_host_config(path: Path) -> HostConfig:
     if missing:
         raise ValueError(f"ホスト設定に必須項目がない: {', '.join(missing)}")
 
+    archive_mount = Path(values["ARCHIVE_MOUNT"])
+    archive_library_root = Path(values["ARCHIVE_LIBRARY_ROOT"])
+    if not archive_library_root.is_relative_to(archive_mount):
+        raise ValueError(f"ARCHIVE_LIBRARY_ROOTがARCHIVE_MOUNT配下にない: {archive_library_root}")
+
     return HostConfig(
         primary_storage_uuid=values["PRIMARY_STORAGE_UUID"],
         primary_storage_fstype=values["PRIMARY_STORAGE_FSTYPE"],
-        archive_mount=Path(values["ARCHIVE_MOUNT"]),
+        archive_mount=archive_mount,
+        archive_library_root=archive_library_root,
         archive_owner=values["ARCHIVE_OWNER"],
         archive_group=values["ARCHIVE_GROUP"],
         smb_share_name=values["SMB_SHARE_NAME"],

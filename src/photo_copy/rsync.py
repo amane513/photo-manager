@@ -34,14 +34,15 @@ _VERSION_LINE_PATTERN = re.compile(r"version\s+([0-9]+(?:\.[0-9]+)*)")
 _PREFLIGHT_FACTS_SCRIPT = (
     "set -u\n"
     'archive_mount="$1"\n'
-    'destination_root="$2"\n'
+    'library_root="$2"\n'
+    'destination_root="$3"\n'
     'printf "OWNER=%s\\n" "$(id -un)"\n'
     'if mountpoint -q -- "$archive_mount"; then printf "MOUNTED=1\\n"; else printf "MOUNTED=0\\n"; fi\n'
     # findmntは--targetの引数の前に--（オプション終端）を置くと解釈に失敗するため付けない。
     'printf "UUID=%s\\n" "$(findmnt -n -o UUID --target "$archive_mount" 2>/dev/null)"\n'
     'case "$destination_root" in\n'
-    '  "$archive_mount"|"$archive_mount"/*) printf "DESTINATION_UNDER_MOUNT=1\\n" ;;\n'
-    '  *) printf "DESTINATION_UNDER_MOUNT=0\\n" ;;\n'
+    '  "$library_root"|"$library_root"/*) printf "DESTINATION_UNDER_LIBRARY_ROOT=1\\n" ;;\n'
+    '  *) printf "DESTINATION_UNDER_LIBRARY_ROOT=0\\n" ;;\n'
     "esac\n"
     'if [ -d "$destination_root" ] && [ -w "$destination_root" ]; then\n'
     '  printf "DESTINATION_WRITABLE=1\\n"\n'
@@ -189,7 +190,14 @@ class RsyncSshTransfer:
 
     def _remote_facts(self) -> dict[str, str]:
         completed = self._run_ssh(
-            ["bash", "-s", "--", str(self._host_config.archive_mount), str(self._destination_root)],
+            [
+                "bash",
+                "-s",
+                "--",
+                str(self._host_config.archive_mount),
+                str(self._host_config.archive_library_root),
+                str(self._destination_root),
+            ],
             input_bytes=_PREFLIGHT_FACTS_SCRIPT.encode(),
         )
         if completed.returncode != 0:
@@ -203,9 +211,9 @@ class RsyncSshTransfer:
 
         if not self._destination_root.is_absolute():
             raise TransferUnavailable(f"配置先ルートは絶対パスで指定する: {self._destination_root}")
-        if not self._destination_root.is_relative_to(self._host_config.archive_mount):
+        if not self._destination_root.is_relative_to(self._host_config.archive_library_root):
             raise TransferUnavailable(
-                f"配置先ルートが{self._host_config.archive_mount}配下にない: {self._destination_root}"
+                f"配置先ルートが{self._host_config.archive_library_root}配下にない: {self._destination_root}"
             )
 
         local_version_line = self._local_rsync_version_line()
@@ -223,8 +231,10 @@ class RsyncSshTransfer:
             raise TransferUnavailable(f"主HDDが未マウントである: {self._host_config.archive_mount}")
         if facts.get("UUID") != self._host_config.primary_storage_uuid:
             raise TransferUnavailable(f"想定外のマウント元UUID: {facts.get('UUID') or '不明'}")
-        if facts.get("DESTINATION_UNDER_MOUNT") != "1":
-            raise TransferUnavailable(f"配置先ルートが主HDD配下にない: {self._destination_root}")
+        if facts.get("DESTINATION_UNDER_LIBRARY_ROOT") != "1":
+            raise TransferUnavailable(
+                f"配置先ルートがライブラリルート{self._host_config.archive_library_root}配下にない: {self._destination_root}"
+            )
         if facts.get("DESTINATION_WRITABLE") != "1":
             raise TransferUnavailable(f"配置先ルートへ書き込めない: {self._destination_root}")
 

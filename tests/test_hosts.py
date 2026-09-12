@@ -11,6 +11,7 @@ VALID_CONTENT = """\
 PRIMARY_STORAGE_UUID=0574e6d5-893c-41b5-84e8-77c41c3b59c1
 PRIMARY_STORAGE_FSTYPE=ext4
 ARCHIVE_MOUNT=/mnt/camera_archive
+ARCHIVE_LIBRARY_ROOT=/mnt/camera_archive/photo-library
 ARCHIVE_OWNER=amane-yajima
 ARCHIVE_GROUP=amane-yajima
 SMB_SHARE_NAME=CameraArchive
@@ -29,6 +30,7 @@ class LoadHostConfigTest(unittest.TestCase):
 
             self.assertEqual(config.primary_storage_uuid, "0574e6d5-893c-41b5-84e8-77c41c3b59c1")
             self.assertEqual(config.archive_mount, Path("/mnt/camera_archive"))
+            self.assertEqual(config.archive_library_root, Path("/mnt/camera_archive/photo-library"))
             self.assertEqual(config.archive_owner, "amane-yajima")
             self.assertEqual(config.ssh_host, "ubuntu")
 
@@ -44,6 +46,20 @@ class LoadHostConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ubuntu.env"
             path.write_text(VALID_CONTENT.replace("SSH_HOST=ubuntu\n", "SSH_HOST=\n"), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                load_host_config(path)
+
+    def test_library_root_outside_mount_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ubuntu.env"
+            path.write_text(
+                VALID_CONTENT.replace(
+                    "ARCHIVE_LIBRARY_ROOT=/mnt/camera_archive/photo-library",
+                    "ARCHIVE_LIBRARY_ROOT=/mnt/other/photo-library",
+                ),
+                encoding="utf-8",
+            )
 
             with self.assertRaises(ValueError):
                 load_host_config(path)
