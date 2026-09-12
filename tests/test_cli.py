@@ -133,6 +133,68 @@ class CopyRequestTest(unittest.TestCase):
             self.assertEqual(first_exit, 0)
             self.assertEqual(second_exit, 0)
 
+    def test_timezone_defaults_to_fixed_value_when_omitted(self) -> None:
+        """decisions.md 2026-09-12: 動画のTZは実行ホスト任せではなく固定値を既定とする。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg-1")
+            logs = root / "logs"
+            args = [
+                "copy",
+                "--source",
+                str(source),
+                "--destination-root",
+                str(root / "destination"),
+                "--year-month",
+                "2026-09",
+                "--device",
+                "camera",
+                "--log-dir",
+                str(logs),
+            ]
+
+            with patch("photo_copy.cli.capture_timestamps", lambda paths, tz=None: {p: "20260911-143052" for p in paths}):
+                exit_code = main(args)
+
+            self.assertEqual(exit_code, 0)
+            log = next(logs.glob("*.json"))
+            payload = json.loads(log.read_text(encoding="utf-8"))
+            self.assertEqual(payload["timezone"], "Asia/Tokyo")
+
+    def test_explicit_timezone_overrides_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg-1")
+            logs = root / "logs"
+            args = [
+                "copy",
+                "--source",
+                str(source),
+                "--destination-root",
+                str(root / "destination"),
+                "--year-month",
+                "2026-09",
+                "--device",
+                "camera",
+                "--log-dir",
+                str(logs),
+                "--timezone",
+                "UTC",
+            ]
+
+            with patch("photo_copy.cli.capture_timestamps", lambda paths, tz=None: {p: "20260911-143052" for p in paths}):
+                exit_code = main(args)
+
+            self.assertEqual(exit_code, 0)
+            log = next(logs.glob("*.json"))
+            payload = json.loads(log.read_text(encoding="utf-8"))
+            self.assertEqual(payload["timezone"], "UTC")
+
 
 class ProfileTest(unittest.TestCase):
     """段階5: プロファイル設定（--profile、--profile-config）の自動テスト。"""

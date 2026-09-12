@@ -71,40 +71,169 @@ MacとUbuntu（`ubuntu`）の間で、`/mnt/camera_archive/photo-copy-test-20260
 - ARW、HEIC、MOV、XMPなど組ファイルの実データからの撮影日時取得は0007で確認する（未対応）。
 - `--only`と実機のSDカード構造（`DCIM/`・`PRIVATE/`の実際の階層）との組み合わせは未確認である。
 
+## 2026-09-12: 第2段階（段階1〜5）の代表メディア・実機確認
+
+SDカード（`CameraSD`、Sony α7C II由来）とMac、Ubuntu（`ubuntu`）の間で確認した。
+コピー元（SDカード）は変更・削除せず、代表ファイルを`cp`でMac上の隔離した作業
+ディレクトリへ複製してから使用した。主HDDへの転送は`/mnt/camera_archive/
+photo-copy-test-*/`配下の隔離した試験先ディレクトリへ行い、確認後にすべて削除
+した（既存の`/mnt/camera_archive/2026/2026-08/`など本番配置には触れていない）。
+作業用の一時ファイル（`~/tmp/photo-copy-real-check/`、約3.3GB）と、確認のために
+作成した`~/.config/photo-copy/profiles.ini`も、確認後にすべて削除した。
+
+iPhone 13由来のHEIC/MOVとXMPサイドカーの確認は、実際にイメージキャプチャで
+取り込む手順を再現しながら行いたいという方針により、今回は見送り0007で扱う。
+
+### 1. 代表メディアでのタグ優先順位・組の基準ファイル判定（ARW/JPG/MP4）
+
+SDカードの`DCIM/100MSDCF/DSC00305.ARW`+`.JPG`（ARW+JPGの組）、`DSC00241.JPG`
+（単独JPG）、`PRIVATE/M4ROOT/CLIP/C0006.MP4`+`C0006M01.XML`（MP4+未対応形式の組）
+を複製して`metadata.capture_timestamps`と`planning.build_plan`を直接呼び出した。
+
+- ARW: `ExifIFD:DateTimeOriginal`（2026-08-23 19:15:59）を取得し、`20260823-191559`
+  になった。同じ組のJPGにも同一の日時プレフィックスが適用された（ARWが基準ファイル
+  として選ばれることを確認）。
+- MP4: `DateTimeOriginal`が無く、`MediaCreateDate`（QuickTimeUTC変換後のローカル
+  時刻）から`20260830-122104`になった。
+- 単独JPG: `DateTimeOriginal`から`20260822-184717`になった。
+- `C0006M01.XML`: 対応タグを持たず`None`になり、計画では「未対応の形式である」で
+  未処理になった。
+- `build_plan`（`--layout classify --device camera`）で、ARW+JPGは同一日時プレフィックス
+  で`camera/`直下へ計画され、MP4は`MediaCreateDate`由来の日時で計画され、XMLは
+  未処理になることを確認した。
+
+HEIC、MOV（iPhone由来）、XMPサイドカーの確認は0007（イメージキャプチャでの
+取り込み手順の再現）へ持ち越す。
+
+### 2. 動画のTZ（decisions.mdの未決定事項の解消）
+
+同じ`C0006.MP4`に異なる`TZ`を与えて`capture_timestamps`とExifTool生出力を比較した。
+
+| TZ | 変換結果 |
+|---|---|
+| 未指定（実行ホスト、Asia/Tokyo相当） | 20260830-122104 |
+| `Asia/Tokyo` | 20260830-122104 |
+| `UTC` | 20260830-032104 |
+| `America/Los_Angeles` | 20260829-202104（前日） |
+
+QuickTimeの生の記録（`-api QuickTimeUTC=1`無し）は`2026:08:30 03:21:04`（オフセット
+情報なし、UTC）であり、変換結果が`TZ`次第で変わることを実データで確認した。一方、
+同じSDカードのARW/JPGは`ExifIFD:DateTimeOriginal`と`OffsetTimeOriginal`（`+09:00`）
+を直接記録しており、実行環境のTZに依存しない。
+
+この非対称性により、動画のTZを実行ホスト任せにすると、内容一致によるスキップの
+前提（同じ配置先名になること）が実行環境によって崩れる恐れがあることを確認した。
+`decisions.md`の2026-09-12「動画のTZは固定値（Asia/Tokyo）とする」で解消し、
+`cli.py`の既定値を`DEFAULT_TIMEZONE = "Asia/Tokyo"`へ変更、回帰テスト2件
+（`test_timezone_defaults_to_fixed_value_when_omitted`、
+`test_explicit_timezone_overrides_default`）を追加した（自動テストは107件から109件）。
+
+### 3. rsync over SSHの`facts()`/`digest()`の実機確認
+
+Ubuntu標準のcoreutils（`wc -c`、`sha256sum`）とNUL区切りのやり取りで、想定どおりに
+動作した。第1段階の`findmnt`のような実装依存の不具合は見つからなかった。
+
+- 初回コピー（ARW/JPG/MP4の4ファイル）を`--transport rsync-ssh`で実行し、正しく
+  配置されることを確認した。
+- 同じ範囲を再実行し、4件とも`facts()`（サイズ一致）→`digest()`（SHA-256一致）で
+  `skipped`になることを確認した（XMLは変わらず`unresolved`）。
+- 単独JPGの1バイトだけを書き換えた同サイズのファイルを用意し、同じ配置先へ
+  送ったところ、サイズが同じでもSHA-256が一致せず`conflict`（「同名で内容が異なる」）
+  になることを確認した。
+
+### 4. 既存ファイルが多い範囲の再実行時間
+
+SDカードから実データのARW+JPG50組（100ファイル、計2.6GB）を複製し、Ubuntu上の
+隔離した試験先へ`--transport rsync-ssh`で計測した。
+
+| 実行 | 所要時間 | 結果 |
+|---|---|---|
+| 初回コピー | 7分24秒 | コピー済み100件 |
+| 再実行（全件既存） | 5.35秒 | スキップ100件 |
+
+初回は前回実測の実効転送速度（5.8 MB/s）に見合う結果だった。再実行は
+ExifToolの一括呼び出し、リモートでの`facts()`/`digest()`（主HDD上の2.6GB分の
+SHA-256計算を含む）、Mac側のSHA-256計算をすべて含めて5.35秒であり、内容一致
+スキップが再送信より大幅に高速であることを実機で確認した。
+
+### 5. `--profile`/`--profile-config`の実運用確認
+
+`~/.config/photo-copy/profiles.ini`（確認後に削除）に、実際の
+`scripts/hosts/ubuntu-amane-yajima.env`を指す`host-config`を含むプロファイルを
+作成し、リポジトリルートから`photo-copy copy --profile sd-to-ubuntu`（dry-run→
+実行）だけで、SDカードの`PRIVATE/M4ROOT/CLIP`配下のMP4 5件をUbuntuの隔離した
+試験先へ実際に配置できることを確認した。詳細ログの`host_config`
+（`scripts/hosts/ubuntu-amane-yajima.env`、カレントディレクトリ基準の相対パス
+のまま記録される）、`timezone`（`Asia/Tokyo`）、`only`、`profile`名がいずれも
+解決後の値として記録されることを確認した。5件は撮影年月が2026-08と2026-09に
+分かれ、`--year-month`を指定しなくても自動分類されることもあわせて確認した。
+
+運用上の注意点: `profiles.ini`はホスト固有の秘密情報を直接含まないが、`source`や
+`destination-root`など環境依存のパスを含むため、ファイル権限を利用者専用
+（`600`）にした。相対パスで書いた`host-config`はカレントディレクトリ基準で解決
+されるため、手順書ではリポジトリルートから実行することを明記する必要がある
+（`docs/setup/mac.md`更新時に反映）。
+
+### 6. TransferAbortedの実機再現（第1段階から持ち越し）
+
+大きめの実データ（`C0006.MP4`、約335MB）を含む3ファイルの転送を開始し、転送開始
+15秒後に、同じ`ControlPath`（`/tmp/photo-copy-<uid>/cm-%C`、SSHの`%C`トークンに
+より自動的に同じソケットへ解決される）に対して`ssh -O exit`を実行し、稼働中の
+ControlMasterを強制的に切断した。
+
+- 転送中のrsyncが`rsync: [sender] write error: Broken pipe (32)` / 終了コード255で
+  失敗し、23/24以外のコードとして`TransferAborted`が正しく送出された。
+- 転送中だったファイルは`failed`、残り2件は「転送中断のため未処理」で`unresolved`
+  になった。構造化結果の`aborted`は`True`、`abort_reason`にrsyncの終了コードと
+  メッセージが記録された。
+- 試験先ディレクトリには、完成した最終名のファイルも、rsyncの一時ファイルも
+  一切残らなかった（`find -type f`で0件）。空になった年月・機器ディレクトリだけ
+  が残り、`rm -rf`で問題なく削除できた。
+
+主HDDへ実害を与えずに、実際のSSH切断によるTransferAbortedを再現できることを
+確認した。
+
+### 7. `--only`と実機のSDカード構造の組み合わせ
+
+SDカード（`/Volumes/CameraSD`）に対して`--dry-run --transport local`で確認した
+（コピー元・コピー先とも変更しない）。
+
+- `--only DCIM/100MSDCF`: 995件が計画された（ExifToolの一括呼び出しは約9秒）。
+- `--only PRIVATE/M4ROOT/CLIP`: MP4 5件が計画され、対応するXML 5件が未対応形式
+  として未処理になった。`PRIVATE/DATABASE`や`PRIVATE/M4ROOT/GENERAL`など
+  範囲外のディレクトリは計画に現れなかった。
+- `--only PRIVATE/M4ROOT/CLIP --only PRIVATE/M4ROOT/THMBNL`
+  （複数指定）: 10件（MP4 5件+サムネイルJPG 5件）が計画され、重複や欠落は
+  無かった。
+
+実機のSDカードの実際の階層（`DCIM/`、`PRIVATE/DATABASE`、`PRIVATE/M4ROOT/{CLIP,
+GENERAL,SUB,TAKE,THMBNL}`）に対しても、`--only`による絞り込みが単一・複数指定
+とも想定どおりに機能することを確認した。
+
+### 今回の実機確認で見つかった不具合
+
+無し。第1段階の`findmnt`のような実装依存の不具合は今回は見つからなかった。
+
 ## 未確認事項（最新）
 
-段階1〜5（撮影日時の一括取得・妥当性検査、`--year-month`省略時の自動分類、
-`facts()`/`digest()`によるサイズ+SHA-256の内容一致スキップ、再実行の安全性、
-プロファイル設定）は、いずれも`.venv/bin/python -m unittest discover -s tests`
-（2026-09-12時点で107件、フェイク注入によるユニットテストのみ）で確認した
-実装であり、代表メディアや実機のUbuntu受信環境には一切触れていない。次の
-各点は実行していない確認であり、完了として扱わない。第1段階から持ち越して
-いる項目も含め、このリストを最新の未確認事項として一本化する。
+- [x] ARW、JPG、MP4の代表メディア（Sony α7C II由来の実データ）で、
+      `metadata.capture_timestamps`が想定どおりのタグを返すこと、組の基準ファイル
+      （ARW優先）が実データでも一意に決まることを2026-09-12に確認した。
+- [ ] HEIC、MOV（iPhone 13由来）、XMPサイドカーの実データ確認は、イメージキャプチャ
+      での取り込み手順の再現とあわせて0007で行う。
+- [x] 動画（MOV/MP4）の`TZ`は2026-09-12に固定値（`Asia/Tokyo`）とする決定で解消した
+      （`decisions.md`参照）。
+- [x] rsync over SSHの`facts()`/`digest()`が呼ぶリモートスクリプトは、Ubuntu標準の
+      coreutilsで想定どおりに動作することを2026-09-12に確認した。
+- [x] 既存ファイルが多い範囲（100ファイル、2.6GB）の再実行時間を2026-09-12に実測した
+      （初回7分24秒→再実行5.35秒）。
+- [x] `--profile`/`--profile-config`を実際の`scripts/hosts/*.env`と組み合わせた実運用を
+      2026-09-12に確認した。
+- [x] （第1段階から持ち越し）TransferAborted相当のSSH切断を、主HDDへ実害を与えない
+      方法（ControlMasterの強制切断）で2026-09-12に実機再現した。
+- [x] （第1段階から持ち越し）`--only`と実機のSDカード構造（`DCIM/`・`PRIVATE/`の実際の
+      階層）の組み合わせを2026-09-12に確認した。
 
-- [ ] ARW、HEIC、MOV、XMPの代表メディア（Sony α7C IIとiPhone 13で撮影した実データ）で、
-      `metadata.capture_timestamps`が想定どおりのタグ（`DateTimeOriginal`→
-      `MediaCreateDate`→`CreateDate`→`TrackCreateDate`）を返すか、組の基準ファイル
-      （`.arw`>`.heic`>`.jpg`/`.jpeg`>`.mov`>`.mp4`）が実データのファイル名・拡張子でも
-      一意に決まるか。
-- [ ] 動画（MOV/MP4）の`TZ`を固定値にするか実行ホストに任せるかは、decisions.mdの
-      未決定事項のままである。代表メディアでQuickTimeUTCの変換結果を確認してから決め、
-      decisions.mdへ追記する。
-- [ ] rsync over SSHの`facts()`/`digest()`が呼ぶリモートスクリプト（`wc -c`、
-      `sha256sum`、NUL区切りの`値\0パス\0`のやり取り）が、Ubuntu標準のcoreutilsで
-      実際に想定どおりの出力になるか。第1段階の`findmnt`のように、フェイクが検出
-      できない実装依存の不具合がある可能性がある。
-- [ ] 既存ファイルが多い範囲を`--layout classify`（省略した`--year-month`による自動分類）
-      や`--profile`で再実行した場合の、実際の所要時間（ExifToolの一括呼び出し時間、
-      リモートでのSHA-256計算時間、主HDDの読み出し時間）。
-- [ ] `--profile`/`--profile-config`を実際の`scripts/hosts/*.env`と組み合わせて日常の
-      コマンドを短縮できるか、`~/.config/photo-copy/profiles.ini`の配置・パーミッション
-      に関する実運用上の注意点。
-- [ ] （第1段階から持ち越し）転送中にSSH接続そのものが切断する中断（`TransferAborted`、
-      終了コード1、23/24以外のrsync終了コード）を、主HDDへの実害を避けるリスクの小さい
-      方法（例: 試験用の隔離ディレクトリへの転送中に受信側のsshdを再起動する等）で
-      実機再現できるか。
-- [ ] （第1段階から持ち越し）`--only`と実機のSDカード構造（`DCIM/`・`PRIVATE/`の実際の
-      階層）との組み合わせ。
-
-これらは0007（代表メディアでの配置・閲覧確認）と、その後の実機確認で扱う。
-確認できた項目はチェックを付け、結果をこのファイルへ日付付きの節として追記する。
+残るHEIC/MOV（iPhone由来）/XMPの実データ確認は0007（代表メディアでの配置・閲覧
+確認、イメージキャプチャでの取り込み手順の再現）で行う。0006としては、この項目を
+除き実機確認が完了している。

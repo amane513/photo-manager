@@ -16,6 +16,11 @@ from .rsync import RsyncSshTransfer
 from .service import execute_copy, result_as_dict
 from .transfer import TransferUnavailable
 
+# 動画のQuickTimeUTC変換に使う既定のTZ。実行ホストの設定に依存すると、動画だけ
+# 実行環境によって配置先名が変わり、内容一致によるスキップが効かなくなるため固定する
+# （decisions.mdの2026-09-12「動画のTZは固定値とする」を参照）。
+DEFAULT_TIMEZONE = "Asia/Tokyo"
+
 
 def _resolve(cli_value, profile_value, builtin_default):
     """優先順位「コマンドライン引数 > プロファイル > CLIの既定値」で1項目を解決する。"""
@@ -89,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--timezone",
         default=None,
         metavar="TZ",
-        help="ExifToolのQuickTimeUTC変換に使うTZ（省略時はプロファイルまたは実行ホストのタイムゾーン）",
+        help=f"ExifToolのQuickTimeUTC変換に使うTZ（省略時はプロファイルまたは固定値{DEFAULT_TIMEZONE}）",
     )
     copy.add_argument(
         "--dry-run",
@@ -214,7 +219,7 @@ def _run_copy(parsed: argparse.Namespace) -> int:
     transport_value = _resolve(parsed.transport, profile.transport if profile else None, TransferKind.LOCAL.value)
     host_config_path = parsed.host_config or (Path(profile.host_config) if profile and profile.host_config else None)
     log_dir = _resolve(parsed.log_dir, Path(profile.log_dir) if profile and profile.log_dir else None, Path(".photo-copy-logs"))
-    timezone = _resolve(parsed.timezone, profile.timezone if profile else None, None)
+    timezone = _resolve(parsed.timezone, profile.timezone if profile else None, DEFAULT_TIMEZONE)
 
     try:
         transfer_kind = TransferKind(transport_value)
