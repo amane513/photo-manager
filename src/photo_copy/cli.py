@@ -34,7 +34,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=Layout.CLASSIFY.value,
         help="classify: 撮影日時で分類・改名する（既定）。preserve: 既存の相対配置を維持する。",
     )
-    copy.add_argument("--year-month", metavar="YYYY-MM", help="layout=classifyで必須")
+    copy.add_argument(
+        "--year-month",
+        metavar="YYYY-MM",
+        help=(
+            "layout=classifyで指定する。省略時は撮影年月へ自動分類する。"
+            "指定時は撮影年月と一致しないファイルを未処理にし、日時不明のファイルは原名のまま指定年月へ配置する"
+        ),
+    )
     copy.add_argument("--device", choices=[member.value for member in Device], help="layout=classifyで必須")
     copy.add_argument(
         "--only",

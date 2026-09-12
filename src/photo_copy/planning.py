@@ -36,9 +36,10 @@ def _validate_layout_arguments(request: CopyRequest) -> None:
         if request.year_month is not None or request.device is not None:
             raise ValueError("layout=preserveでは--year-monthと--deviceを指定できない")
     else:
-        if request.year_month is None or request.device is None:
-            raise ValueError("layout=classifyでは--year-monthと--deviceが必須である")
-        _validated_year_month(request.year_month)
+        if request.device is None:
+            raise ValueError("layout=classifyでは--deviceが必須である")
+        if request.year_month is not None:
+            _validated_year_month(request.year_month)
 
 
 def enumerate_files(source: Path, *, only: Sequence[str] = ()) -> tuple[Path, ...]:
@@ -104,15 +105,20 @@ def _members_by_key(source_root: Path, paths: Iterable[Path]) -> dict[str, list[
     return groups
 
 
-def _reference_member(members: list[Path]) -> Path | None:
-    """SonyはARW、Live PhotoはHEICを組の日時基準にする。"""
+REFERENCE_PRIORITY = (".arw", ".heic", ".jpg", ".jpeg", ".mov", ".mp4")
 
-    suffixes = {member.suffix.lower() for member in members}
-    arw = next((member for member in members if member.suffix.lower() == ".arw"), None)
-    if arw is not None:
-        return arw
-    if ".heic" in suffixes and ".mov" in suffixes:
-        return next(member for member in members if member.suffix.lower() == ".heic")
+
+def _reference_member(members: list[Path]) -> Path | None:
+    """組内の対応形式から、優先順位に従って基準ファイルを一意に選ぶ。
+
+    優先順位は ``.arw`` > ``.heic`` > ``.jpg``/``.jpeg`` > ``.mov`` > ``.mp4`` とする。
+    ``.xmp`` はサイドカーであり現像ツールが内容を書き換えるため、基準にしない。
+    """
+
+    for suffix in REFERENCE_PRIORITY:
+        member = next((member for member in members if member.suffix.lower() == suffix), None)
+        if member is not None:
+            return member
     return None
 
 
@@ -120,10 +126,12 @@ def _is_supported(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED_SUFFIXES
 
 
-def _destination(request: CopyRequest, path: Path, timestamp: str) -> Path:
-    assert request.year_month is not None and request.device is not None
-    year, month = _validated_year_month(request.year_month)
-    return request.destination_root / year / f"{year}-{month}" / request.device.value / f"{timestamp}_{path.name}"
+def _destination(request: CopyRequest, path: Path, *, year: str, month: str, timestamp: str | None) -> Path:
+    """配置先を決める。``timestamp`` がNoneの場合は日時プレフィックスを付けず原名のままにする。"""
+
+    assert request.device is not None
+    name = f"{timestamp}_{path.name}" if timestamp is not None else path.name
+    return request.destination_root / year / f"{year}-{month}" / request.device.value / name
 
 
 def _validated_year_month(value: str) -> tuple[str, str]:
@@ -137,7 +145,8 @@ def _reference_paths_by_key(groups: dict[str, list[Path]]) -> dict[str, Path | N
     """各組について、日時取得に使う基準ファイルだけを決める。
 
     非基準メンバー（JPEG、XMP、MOVなど）にはExifToolを呼ばないため、この時点では
-    まだ日時を読まない。
+    まだ日時を読まない。優先順位に一致する形式が無い組（xmpだけの組など）は
+    Noneのままにする。
     """
 
     reference_by_key: dict[str, Path | None] = {}
@@ -145,11 +154,20 @@ def _reference_paths_by_key(groups: dict[str, list[Path]]) -> dict[str, Path | N
         supported = [member for member in members if _is_supported(member)]
         if not supported:
             continue
-        reference = _reference_member(supported)
-        if reference is None and len(supported) == 1:
-            reference = supported[0]
-        reference_by_key[key] = reference
+        reference_by_key[key] = _reference_member(supported)
     return reference_by_key
+
+
+def _unresolved_timestamp_reason(reference: Path | None, raw_timestamp: str | None, *, now: datetime | None) -> str:
+    """撮影日時を採用できない理由を、原因ごとに区別して返す。"""
+
+    if reference is None:
+        return "組の基準ファイルがない"
+    if raw_timestamp is None:
+        return "組の基準ファイルから撮影日時を取得できない"
+    if TIMESTAMP_PATTERN.fullmatch(raw_timestamp) is None:
+        return "撮影日時の形式が不正である"
+    return f"撮影日時が範囲外である（1990-01-01以降かつ実行時刻の翌日以前ではない）: {raw_timestamp}"
 
 
 def _build_classify_plan(
@@ -195,28 +213,42 @@ def _build_classify_plan(
             continue
 
         reference = reference_by_key.get(key)
-        timestamp = timestamps.get(reference) if reference is not None else None
+        raw_timestamp = timestamps.get(reference) if reference is not None else None
 
-        reason: str | None = None
-        if timestamp is None:
-            if reference is not None:
-                reason = "組の基準ファイルから撮影日時を取得できない"
-            elif len(supported) > 1:
-                reason = "組の基準ファイルがない"
-            else:
-                reason = "撮影日時を取得できない"
-        elif TIMESTAMP_PATTERN.fullmatch(timestamp) is None:
-            reason = "撮影日時の形式が不正である"
-        elif not is_timestamp_in_valid_range(timestamp, now=now):
-            reason = f"撮影日時が範囲外である（1990-01-01以降かつ実行時刻の翌日以前ではない）: {timestamp}"
+        valid_timestamp: str | None = None
+        if (
+            raw_timestamp is not None
+            and TIMESTAMP_PATTERN.fullmatch(raw_timestamp) is not None
+            and is_timestamp_in_valid_range(raw_timestamp, now=now)
+        ):
+            valid_timestamp = raw_timestamp
 
-        if reason is not None:
+        if valid_timestamp is not None:
+            year, month = valid_timestamp[:4], valid_timestamp[4:6]
+            if request.year_month is not None:
+                requested_year, requested_month = _validated_year_month(request.year_month)
+                if (year, month) != (requested_year, requested_month):
+                    reason = f"--year-monthと撮影年月が一致しない（撮影年月: {year}-{month}）"
+                    for member in supported:
+                        planned.append(PlannedItem(member, None, None, key, ItemStatus.UNRESOLVED, reason))
+                    continue
+            for member in supported:
+                destination = _destination(request, member, year=year, month=month, timestamp=valid_timestamp)
+                planned.append(PlannedItem(member, destination, valid_timestamp, key, ItemStatus.PLANNED))
+            continue
+
+        # 撮影日時が取得できない場合。--year-monthが無ければ未処理にし、
+        # あれば利用者の主張どおりその年月へ原名のまま配置する。
+        if request.year_month is None:
+            reason = _unresolved_timestamp_reason(reference, raw_timestamp, now=now) + "。--year-monthを指定して再実行する"
             for member in supported:
                 planned.append(PlannedItem(member, None, None, key, ItemStatus.UNRESOLVED, reason))
             continue
 
+        year, month = _validated_year_month(request.year_month)
         for member in supported:
-            planned.append(PlannedItem(member, _destination(request, member, timestamp), timestamp, key, ItemStatus.PLANNED))
+            destination = _destination(request, member, year=year, month=month, timestamp=None)
+            planned.append(PlannedItem(member, destination, None, key, ItemStatus.PLANNED))
 
     return planned
 

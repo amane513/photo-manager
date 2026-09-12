@@ -59,7 +59,7 @@ class LayoutModeTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 build_plan(self.preserve_request(source, root / "destination", device=Device.CAMERA))
 
-    def test_classify_requires_year_month_and_device(self) -> None:
+    def test_classify_requires_device(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
@@ -74,6 +74,26 @@ class LayoutModeTest(unittest.TestCase):
                         layout=Layout.CLASSIFY,
                     )
                 )
+
+    def test_classify_does_not_require_year_month(self) -> None:
+        """--year-monthの省略は、撮影年月への自動分類として受け付ける（第2段階）。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+
+            plan = build_plan(
+                CopyRequest(
+                    source=source,
+                    destination_root=root / "destination",
+                    transfer_kind=TransferKind.LOCAL,
+                    layout=Layout.CLASSIFY,
+                    device=Device.CAMERA,
+                )
+            )
+
+            self.assertEqual(plan, ())
 
     def test_classify_on_already_placed_tree_is_unresolved(self) -> None:
         """配置済みのツリーをclassifyで処理すると、二重の日時プレフィックスにならず未処理になる。"""
@@ -187,6 +207,76 @@ class LayoutModeTest(unittest.TestCase):
                 build_plan(self.classify_request(source, root / "destination", only=("/etc",)))
             with self.assertRaises(ValueError):
                 build_plan(self.classify_request(source, root / "destination", only=("../escape",)))
+
+
+class AutoClassifyTest(unittest.TestCase):
+    """--year-month省略時の自動分類（第2段階）の自動テスト。"""
+
+    def classify_request(self, source: Path, destination: Path, **overrides) -> CopyRequest:
+        fields = dict(
+            source=source,
+            destination_root=destination,
+            transfer_kind=TransferKind.LOCAL,
+            layout=Layout.CLASSIFY,
+            device=Device.CAMERA,
+        )
+        fields.update(overrides)
+        return CopyRequest(**fields)
+
+    def test_files_spanning_multiple_months_are_classified_independently(self) -> None:
+        """1回の実行で複数月へ分かれてよい（C09）。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"aug")
+            (source / "DSC00002.JPG").write_bytes(b"sep")
+
+            timestamps = {
+                source / "DSC00001.JPG": "20260831-235900",
+                source / "DSC00002.JPG": "20260901-000100",
+            }
+            result = execute_copy(
+                self.classify_request(source, root / "destination"),
+                timestamps_for=lambda paths: {p: timestamps[p] for p in paths},
+            )
+
+            self.assertEqual(result.counts()["copied"], 2)
+            self.assertTrue((root / "destination" / "2026" / "2026-08" / "camera" / "20260831-235900_DSC00001.JPG").exists())
+            self.assertTrue((root / "destination" / "2026" / "2026-09" / "camera" / "20260901-000100_DSC00002.JPG").exists())
+
+    def test_lone_mov_without_arw_or_heic_uses_itself_as_reference(self) -> None:
+        """優先順位の拡張により、ARW/HEICを伴わない単独MOVも基準にできる。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "CLIP.MOV").write_bytes(b"mov")
+
+            result = execute_copy(
+                self.classify_request(source, root / "destination"),
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
+            )
+
+            self.assertEqual(result.counts()["copied"], 1)
+
+    def test_lone_heic_without_mov_uses_itself_as_reference(self) -> None:
+        """Live Photoの組み合わせ（MOV同伴）を前提とせず、単独HEICも基準にできる。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "IMG_0001.HEIC").write_bytes(b"heic")
+
+            result = execute_copy(
+                self.classify_request(source, root / "destination"),
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
+            )
+
+            self.assertEqual(result.counts()["copied"], 1)
 
 
 if __name__ == "__main__":  # pragma: no cover

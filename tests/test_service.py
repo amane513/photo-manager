@@ -21,6 +21,14 @@ class CopyServiceTest(unittest.TestCase):
             dry_run=dry_run,
         )
 
+    def request_without_year_month(self, source: Path, destination: Path) -> CopyRequest:
+        return CopyRequest(
+            source=source,
+            destination_root=destination,
+            transfer_kind=TransferKind.LOCAL,
+            device=Device.CAMERA,
+        )
+
     def test_copies_with_timestamp_prefix_without_changing_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -106,7 +114,9 @@ class CopyServiceTest(unittest.TestCase):
             self.assertTrue(all(item.status is ItemStatus.PLANNED for item in plan))
             self.assertEqual(requested_paths, [arw])
 
-    def test_group_without_reference_is_unresolved_and_not_copied(self) -> None:
+    def test_jpeg_with_xmp_uses_jpeg_as_reference_when_no_raw_present(self) -> None:
+        """現像ツールが書き出したJPEG+XMPの組も、拡張した優先順位でJPEGを基準にできる。"""
+
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
@@ -116,12 +126,68 @@ class CopyServiceTest(unittest.TestCase):
 
             result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
 
-            self.assertEqual(result.counts()["unresolved"], 2)
+            self.assertEqual(result.counts()["copied"], 2)
+            self.assertTrue(all(item.timestamp == "20260911-143052" for item in result.items))
+
+    def test_group_without_any_reference_eligible_file_is_unresolved_when_year_month_omitted(self) -> None:
+        """xmpだけの組など、優先順位に一致する形式が無い場合はxmpを基準にせず未処理にする。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.ARW.xmp").write_bytes(b"xmp")
+
+            result = execute_copy(
+                self.request_without_year_month(source, root / "destination"),
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
+            )
+
+            self.assertEqual(result.counts()["unresolved"], 1)
             self.assertFalse((root / "destination").exists())
             self.assertIn("基準ファイルがない", result.items[0].reason or "")
+            self.assertIn("--year-monthを指定して再実行する", result.items[0].reason or "")
 
-    def test_out_of_range_timestamp_is_unresolved_not_misplaced(self) -> None:
-        """カメラの時計リセット相当の日時は、推測で配置せず未処理として報告する。"""
+    def test_group_without_any_reference_eligible_file_is_placed_with_original_name_when_year_month_given(self) -> None:
+        """--year-monthを明示していれば、基準が無いファイルも原名のまま指定年月へ配置する。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.ARW.xmp").write_bytes(b"xmp")
+
+            result = execute_copy(
+                self.request(source, root / "destination"),
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
+            )
+
+            target = root / "destination" / "2026" / "2026-09" / "camera" / "DSC00001.ARW.xmp"
+            self.assertEqual(result.counts()["copied"], 1)
+            self.assertIsNone(result.items[0].timestamp)
+            self.assertEqual(target.read_bytes(), b"xmp")
+
+    def test_out_of_range_timestamp_is_unresolved_when_year_month_omitted(self) -> None:
+        """カメラの時計リセット相当の日時は、自動分類では推測で配置せず未処理として報告する。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg")
+
+            plan = build_plan(
+                self.request_without_year_month(source, root / "destination"),
+                timestamps_for=lambda paths: {p: "19700101-000000" for p in paths},
+                now=datetime(2026, 9, 12),
+            )
+
+            self.assertEqual(plan[0].status, ItemStatus.UNRESOLVED)
+            self.assertIn("19700101-000000", plan[0].reason or "")
+            self.assertIn("--year-monthを指定して再実行する", plan[0].reason or "")
+
+    def test_out_of_range_timestamp_is_placed_with_original_name_when_year_month_given(self) -> None:
+        """--year-monthを明示していれば、範囲外の日時でもプレフィックス無しの原名で指定年月へ配置する。"""
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -135,8 +201,27 @@ class CopyServiceTest(unittest.TestCase):
                 now=datetime(2026, 9, 12),
             )
 
+            self.assertEqual(plan[0].status, ItemStatus.PLANNED)
+            self.assertIsNone(plan[0].timestamp)
+            self.assertEqual(plan[0].destination, root / "destination" / "2026" / "2026-09" / "camera" / "DSC00001.JPG")
+
+    def test_mismatched_year_month_is_unresolved_with_actual_year_month_in_reason(self) -> None:
+        """撮影年月が--year-monthと食い違う場合は、指定年月へ従わせず未処理にする。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg")
+
+            plan = build_plan(
+                self.request(source, root / "destination"),
+                timestamps_for=lambda paths: {p: "20260815-090000" for p in paths},
+                now=datetime(2026, 9, 12),
+            )
+
             self.assertEqual(plan[0].status, ItemStatus.UNRESOLVED)
-            self.assertIn("19700101-000000", plan[0].reason or "")
+            self.assertIn("2026-08", plan[0].reason or "")
 
     def test_unknown_format_is_reported_not_silently_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
