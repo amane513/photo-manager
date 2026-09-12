@@ -54,3 +54,5 @@ sudo ./scripts/ubuntu/verify-primary-storage.sh \
 Macではrsyncをdotfilesで管理する。`setup-copy-cli.sh` はExifTool、プロジェクト専用venv、CLIだけを導入し、`verify-copy-cli.sh` はその状態を変更せず検査する。
 
 Ubuntuでは `setup-copy-receiver.sh` が不足する `rsync` と `libimage-exiftool-perl` をaptで導入し、`verify-copy-receiver.sh` が主HDDへの受入れ状態を検査する。いずれも既に導入済みのパッケージを更新しない。
+
+`mac/profiles.ini.example` は `photo-copy` の定型設定（プロファイル）のテンプレートである。`~/.config/photo-copy/profiles.ini` へコピーして実際のパスへ書き換える。利用手順の正本は [docs/setup/mac.md](../docs/setup/mac.md) である。

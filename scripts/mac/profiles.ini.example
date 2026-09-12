@@ -1,0 +1,40 @@
+# photo-copyのプロファイル設定テンプレート。
+#
+# コピーしてから編集する。
+#   cp scripts/mac/profiles.ini.example ~/.config/photo-copy/profiles.ini
+#   chmod 600 ~/.config/photo-copy/profiles.ini
+#
+# 相対パス（source、destination-root、host-configなど）は、このファイルの
+# 位置ではなくphoto-copy実行時のカレントディレクトリを基準に解釈される。
+# host-configをリポジトリ相対で書く場合は、リポジトリのルートから実行すること。
+#
+# year-monthとdry-runはここに書けない（実行ごとに判断する値のため）。
+# コマンドライン引数はここに書いた値を上書きする。
+
+# 経路a: Macに挿したSDから、rsync over SSHでUbuntuの主HDDへ直接コピーする。
+[profile.sd-to-ubuntu]
+source = /Volumes/CameraSD
+device = camera
+transport = rsync-ssh
+host-config = ./scripts/hosts/ubuntu-amane-yajima.env
+
+# 経路b: Macに挿したSDを、いったんPhotoWorkへコピーする（選別・現像が必要なとき）。
+[profile.sd-to-mac]
+source = /Volumes/CameraSD
+destination-root = /Users/amaneyajima/Pictures/PhotoWork
+device = camera
+transport = local
+
+# 経路c: PhotoWork（既存の相対配置を維持したまま）から、rsync over SSHでUbuntuの主HDDへコピーする。
+[profile.photowork-to-ubuntu]
+source = /Users/amaneyajima/Pictures/PhotoWork
+layout = preserve
+transport = rsync-ssh
+host-config = ./scripts/hosts/ubuntu-amane-yajima.env
+
+# iPhone: イメージキャプチャで取り込んだ一時置き場から、PhotoWorkへ分類する。
+[profile.iphone-to-photowork]
+source = /Users/amaneyajima/Pictures/PhoneImportInbox/iphone
+destination-root = /Users/amaneyajima/Pictures/PhotoWork
+device = smartphone
+transport = local

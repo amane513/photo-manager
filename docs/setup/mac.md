@@ -5,12 +5,14 @@ SDカードとiPhoneからの取り込み、必要時の選別・現像、Amazon
 ## 前提
 
 - UbuntuへSSH接続でき、Ubuntu側の主HDDとSMB共有が利用できる（[ubuntu.md](ubuntu.md)）。
-- 作業フォルダは `~/Pictures/PhotoWork/` の1つとする。
+- 作業フォルダは `~/Pictures/PhotoWork/` の1つとする。HDDと同じ年月・機器別の分類済み構成だけを置く。
+- iPhoneの取り込み用に `~/Pictures/PhoneImportInbox/<機器名>/` を一時置き場として使う（手順6）。
 
 ## 手動で行う作業
 
 - Amazon Photos Desktopのインストール後のログインと、バックアップ対象フォルダの指定。
 - 現像ツールのライセンスやアカウントが必要な場合の初回設定。
+- iPhoneを初めてこのMacへ接続したときに、iPhone側で「このコンピュータを信頼しますか？」を許可する。
 
 ## 手順
 
@@ -46,6 +48,8 @@ ExifToolはphoto-managerの構築対象である。スクリプトはExifToolが
 
 `--layout classify`（既定）は撮影日時を読み、組を判定して `YYYY/YYYY-MM/{camera,smartphone}/` 直下へ改名・分類する。実写真や既存のライブラリを使わず、一時ディレクトリへ小さな試験ファイルを作成して確認する。コピー元は変更・削除されず、保存先は撮影日時のメタデータを取得できたファイルだけで構成される。
 
+`--year-month` は省略できる。省略した場合は組ごとの撮影年月へ自動分類され、1回の実行で複数月にまたがる入力も扱える。`--year-month` を明示すると、その年月と食い違う撮影日時のファイルを未処理にし、撮影日時が取得できないファイルだけを原名のままその年月へ配置する（日時不明分の再実行に使う）。
+
 ```sh
 trial_root="$(mktemp -d)"
 mkdir -p "$trial_root/source/DCIM"
@@ -54,7 +58,6 @@ cp /path/to/a-small-test-file.jpg "$trial_root/source/DCIM/"
 .venv/bin/photo-copy copy \
   --source "$trial_root/source" \
   --destination-root "$trial_root/destination" \
-  --year-month 2026-09 \
   --device camera \
   --transport local \
   --dry-run \
@@ -66,6 +69,10 @@ cp /path/to/a-small-test-file.jpg "$trial_root/source/DCIM/"
 ```text
 <保存先ルート>/2026/2026-09/camera/20260911-143052_<原名>
 ```
+
+動画（MOV/MP4）の撮影日時はQuickTimeのUTC記録を変換して得るため、変換に使う `TZ` の値によって結果が変わりうる。既定は固定値 `Asia/Tokyo` であり、実行ホストの設定には依存しない。海外で撮影した動画をその場のタイムゾーンで配置したい場合だけ `--timezone <IANA名>` を明示する。
+
+同名候補が既に配置先にある場合、サイズとSHA-256による内容一致を確認できたものだけ自動的にスキップする（`skipped`、終了コードに影響しない）。内容が異なる同名ファイルは上書きせず衝突として報告する。中断や部分失敗の後も同じコマンドを再実行してよい。前回の状態を記録するファイルは無く、保存先の実体だけで再実行の安全性が決まる。
 
 経路c（`PhotoWork` からUbuntuの主HDDへの転送）に相当する、既存の相対配置を維持する場合は `--layout preserve` を使う。この場合 `--year-month` と `--device` は指定できず、ExifToolも呼ばない。コピー元からの相対パスが `YYYY/YYYY-MM/{camera,smartphone}/名前` のちょうど4階層でない場合や、シンボリックリンクの場合は未処理として報告する。
 
@@ -95,20 +102,61 @@ ARW/JPEG/XMPの組はARW、HEIC/MOVの組はHEICの撮影日時を全ファイ�
 
 このコマンドは接続ユーザー、主HDDのマウントとUUID、配置先ルートの書き込み可否、Mac側・リモート側のrsyncバージョンを検査する。いずれかに失敗すると、転送を一切行わずに終了コード2で停止する。
 
-経路aの例（`--destination-root` を省略すると、ホスト設定の `ARCHIVE_MOUNT` が既定になる）。
+経路aの例（`--destination-root` を省略すると、ホスト設定の `ARCHIVE_MOUNT` が既定になる。`--year-month` も省略でき、撮影年月へ自動分類される）。
 
 ```sh
 .venv/bin/photo-copy copy \
   --source /Volumes/<SDカード> \
-  --year-month 2026-09 \
   --device camera \
   --transport rsync-ssh \
   --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
   --dry-run
 ```
 
-通常実行では `--dry-run` を外す。SSH接続はOpenSSHのControlMasterで多重化し、コピー元・配置先の組ごとにrsyncを1回呼ぶ。転送は `--times --itemize-changes --ignore-existing` を使い、コピー元削除・削除同期・インプレース書き込みは行わない。`--ignore-existing` によるスキップは内容一致とはみなさず、衝突として報告する。
+通常実行では `--dry-run` を外す。SSH接続はOpenSSHのControlMasterで多重化し、コピー元・配置先の組ごとにrsyncを1回呼ぶ。転送は `--times --itemize-changes --ignore-existing` を使い、コピー元削除・削除同期・インプレース書き込みは行わない。`--ignore-existing` によるスキップは内容一致とはみなさず、衝突として報告する。内容一致によるスキップ（`skipped`）はローカル転送と同じくサイズとSHA-256で判定し、コピー元のハッシュはMac側、配置先のハッシュはリモートで計算するため、ファイル本体をハッシュ比較のためだけに転送し直すことはない。
 
 隔離した試験先で確認する場合は、`ARCHIVE_MOUNT` 配下に試験用のディレクトリを作り、そこを `--destination-root` に指定する。試験後は忘れずに削除する。
+
+### 6. iPhoneから取り込む（イメージキャプチャ）
+
+iPhoneはイメージキャプチャでMacへ取り込んだ後、`photo-copy` で分類する。取り込み先はPhotoWorkの中ではなく `~/Pictures/PhoneImportInbox/<機器名>/` とする（[decisions.md](../plans/0006_copy-cli-foundation/decisions.md) の「イメージキャプチャの取り込み先はPhotoWorkの外に置く」参照）。理由は、PhotoWorkはHDDと同じ年月・機器別の分類済み構成を保つ前提であり、イメージキャプチャが吐く未分類の生ファイルをそのまま置くとこの前提が崩れるためである。
+
+1. Lightning（またはUSB-C）ケーブルでiPhoneをMacへ接続し、初回は「このコンピュータを信頼しますか？」を許可する。
+2. 「イメージキャプチャ」を開き、左のデバイス一覧でiPhoneを選ぶ。
+3. 「読み込み先:」（`Import To:`）を「その他...」（`Other...`）にし、`~/Pictures/PhoneImportInbox/iphone` を選ぶ（無ければ作成する）。
+4. 取り込みたい項目を選択し、「読み込む」（`Download`）をクリックする。Live Photoは左上に渦巻きアイコンが付いた写真であり、HEICと対になるMOVが同じ番号で取り込まれる。
+
+```sh
+mkdir -p ~/Pictures/PhoneImportInbox/iphone
+```
+
+取り込み後、`~/Pictures/PhoneImportInbox/iphone/` の生ファイルをPhotoWorkへ分類する。
+
+```sh
+.venv/bin/photo-copy copy \
+  --source ~/Pictures/PhoneImportInbox/iphone \
+  --destination-root ~/Pictures/PhotoWork \
+  --device smartphone \
+  --transport local
+```
+
+Live Photoの組（同じ撮影の`.HEIC`と`.MOV`）は、`.heic` が基準ファイルとして選ばれ同一の日時プレフィックスになる。分類が終わったら `~/Pictures/PhoneImportInbox/iphone/` の中身を空にする（コピー元保持の原則はこの一時置き場には適用しない）。
+
+### 7. 定型設定（プロファイル）を使う
+
+コピー元、配置先ルート、転送方式、ホスト設定、機器種別など経路ごとに固定される値は、プロファイル設定ファイルへまとめられる。既定の場所は `~/.config/photo-copy/profiles.ini` である（`--profile-config` で変更可）。相対パスはプロファイル設定ファイルの位置ではなくカレントディレクトリを基準に解釈するため、リポジトリのルートから実行する。テンプレートは [`scripts/mac/profiles.ini.example`](../../scripts/mac/profiles.ini.example) を参照する。
+
+```sh
+cp scripts/mac/profiles.ini.example ~/.config/photo-copy/profiles.ini
+chmod 600 ~/.config/photo-copy/profiles.ini
+# 実際のパスとホスト設定に合わせて編集する
+```
+
+```sh
+.venv/bin/photo-copy copy --profile sd-to-ubuntu --dry-run
+.venv/bin/photo-copy copy --profile sd-to-ubuntu
+```
+
+`--year-month` と `--dry-run` はプロファイルに書けない（実行ごとに判断する値のため）。コマンドライン引数はプロファイルの値を上書きする。適用したプロファイル名と解決後の全項目は詳細ログへ記録される。
 
 Amazon Photos Desktopの設定は0008で追加する。SMBマウントは取り込みに使わず、Amazon Photosと必要時の参照用とする。

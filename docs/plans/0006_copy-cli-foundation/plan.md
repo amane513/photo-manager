@@ -4,7 +4,7 @@
 
 更新日: 2026-09-12
 
-状態: 実施中（第1段階の実装・自動テスト・実機確認まで完了。第2段階は段階1〜5の実装・自動テストに加え、ARW/JPEG/MP4での代表メディア確認とrsync over SSHの実機確認（内容一致・所要時間・プロファイル・中断再現・`--only`）まで完了。HEIC/MOV（iPhone由来）・XMPの確認と、インストールスクリプトとdocs/setupの更新が未着手）
+状態: 完了（第1段階・第2段階の実装・自動テスト・実機確認、ARW/JPEG/MP4とHEIC/MOV（iPhone由来）・XMPサイドカーの代表メディア確認、rsync over SSHの実機確認（内容一致・所要時間・プロファイル・中断再現・`--only`）、インストール・設定・更新・確認スクリプトの実機再実行、`docs/setup/mac.md`・`docs/setup/ubuntu.md`・`scripts/`の更新まで完了。実施手順・完了条件をすべて満たした）
 
 ## 目的
 
@@ -148,7 +148,9 @@ SMB共有は廃止せず、Amazon Photos Desktopからの参照と必要時のFi
 
 - [x] 経路aの「SDから主HDDへ明示年月でコピーする」正常系について、コマンドと期待結果を決める。
 - [x] 経路bと経路cについて、同じ処理で共通化する部分と経路固有の指定を決める。
-- [ ] 代表ファイルを確認し、最小版で列挙する対象と未処理にする対象を決める。
+- [x] 代表ファイルを確認し、最小版で列挙する対象と未処理にする対象を決める。
+      対応形式（`SUPPORTED_SUFFIXES`）とOSが作る雑多ファイルの除外区分として実装し、
+      SDカード・iPhoneの実データ（ARW/JPG/MP4、HEIC/MOV、XMP）で確認済みである。
 - [x] 上書き禁止、部分完了、中断、一時ファイル、終了コード、ログの具体的な規則を決める。
 - [x] 実装言語、依存関係、配布方法、コード配置、共通APIの境界を決める。
 - [x] 決定事項を本プランまたは `decisions.md` に記録する。
@@ -181,12 +183,20 @@ SMB共有は廃止せず、Amazon Photos Desktopからの参照と必要時のFi
 - [x] 段階4: 内容一致スキップを前提に、部分失敗・中断・一時ファイル残存後の再実行が壊さないことを確認する。要約と終了コードの扱いを更新する。
 - [x] 段階5: プロファイル設定（`~/.config/photo-copy/profiles.ini`、`--profile`、`--profile-config`）と、解決後の値のログ記録を実装する。
 - [x] 複数月、日時不明、年月不一致、壊れた撮影日時、同一スキップ、異なる同名、組ファイル、再実行、プロファイルの優先順位を自動テストする（フェイク注入によるユニットテストであり、実機・実データでの確認は次項以降で行う）。
-- [ ] 代表メディア（ARW/JPEG/XMP、HEIC/MOV）で撮影日時の取得を確認し、`TZ` を固定するかを決めて `decisions.md` の未決定事項を解消する。
+- [x] 代表メディア（ARW/JPEG/XMP、HEIC/MOV）で撮影日時の取得を確認し、`TZ` を固定するかを決めて `decisions.md` の未決定事項を解消する。
       ARW/JPEG/MP4は2026-09-12に実データで確認し、`TZ`は固定値（`Asia/Tokyo`）に決定した。
-      HEIC・MOV（iPhone由来）・XMPは0007（イメージキャプチャでの取り込み手順の再現）で確認する。
+      HEIC・MOV（iPhone由来）・XMPも2026-09-12にイメージキャプチャの取り込み手順を
+      再現しながら実データで確認した（`validation.md`参照、退行なし）。
 - [x] 代表メディアとrsync over SSHを使って実機確認し、既存ファイルが多い範囲でのハッシュ計算時間を計測して `validation.md` に記録する。
-- [ ] インストール、設定、更新、確認のスクリプトを用意し、実際のMacとUbuntuで実行する。
-- [ ] `docs/setup/mac.md`、`docs/setup/ubuntu.md` と `scripts/` を、新しいMacとUbuntuで再構築できる状態へ更新する。
+- [x] インストール、設定、更新、確認のスクリプトを用意し、実際のMacとUbuntuで実行する。
+      既存の`scripts/mac/{setup,verify}-copy-cli.sh`と
+      `scripts/ubuntu/{setup,verify}-copy-receiver.sh`を2026-09-12に実機で再実行し、
+      第2段階の実装後も冪等に動作することを確認した（`validation.md`参照）。
+- [x] `docs/setup/mac.md`、`docs/setup/ubuntu.md` と `scripts/` を、新しいMacとUbuntuで再構築できる状態へ更新する。
+      `--year-month`省略時の自動分類、動画TZの固定値、内容一致スキップ、iPhoneの
+      イメージキャプチャ手順（`~/Pictures/PhoneImportInbox/`）、プロファイル設定
+      （`scripts/mac/profiles.ini.example`）を`mac.md`へ反映し、`ubuntu.md`へ内容一致
+      スキップの補足を追加した。
 
 ## 検証方針
 

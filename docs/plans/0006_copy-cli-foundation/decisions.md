@@ -303,8 +303,8 @@ dry-runで `preflight()` と `existing()` まで実行するのは、保存先�
 - 動画の `TZ` を固定値にするか、実行ホストに任せるかは、代表的なMOV・MP4を確認してから決める。
   → 2026-09-12（実データ確認）の決定で解消した。固定値 `Asia/Tokyo` を既定とする。
 - ARW、HEIC、MOV、XMPの実データでタグの並びが想定どおりかは実機で確認する。
-  → 2026-09-12にARW・JPG・MP4の実データで確認した（`validation.md` 参照）。HEIC・MOV（iPhone由来）・
-  XMPは0007（イメージキャプチャでの取り込み手順の再現）で確認する。
+  → 2026-09-12にARW・JPG・MP4、および同日のHEIC・MOV（iPhone由来）・XMPの実データで確認した
+  （`validation.md` 参照）。
 
 ## 2026-09-12: `--year-month` の省略で撮影年月へ自動分類し、指定時は食い違いを検出する
 
@@ -494,3 +494,22 @@ dry-runで `preflight()` と `existing()` まで実行するのは、保存先�
 ### 設計上の制約
 
 - `docs/setup/mac.md` の手順書には、固定値を明示的に上書きしたい場合の `--timezone` の使い方を追記する（実機確認後、setup更新の作業でまとめて行う）。
+
+## 2026-09-12: イメージキャプチャの取り込み先はPhotoWorkの外に置く
+
+### 決定
+
+- iPhoneをイメージキャプチャで取り込む際の読み込み先は、`~/Pictures/PhotoWork/` の中ではなく、`~/Pictures/PhoneImportInbox/<機器名>/`（例: `iphone/`）とする。
+- ここは常設の分類先ではなく、一時置き場とする。取り込んだ生ファイルは `photo-copy copy --transport local --layout classify --device smartphone` でPhotoWork直下へ分類し、置き場自体は分類後に空にする運用とする。
+- SDカードを経由bで通す場合（選別・現像が必要なとき）も、SDは直接 `--source` としてPhotoWorkへ分類済みの形で書き込めるため、同様の一時置き場は不要である。
+
+### 理由
+
+- `docs/proposal.md` 4.1は「Macの `~/Pictures/PhotoWork/` とHDDの `/mnt/camera_archive/` 以下を、同じ相対構成とする」と定めている。イメージキャプチャは撮影日時による分類ができず、原名のままの生ファイルを吐き出すため、これをPhotoWork直下に置くと「同じ相対構成」の前提が崩れる。
+- SDカードは経路a・経路bのいずれでも、photo-copyが直接読める既存のマウントされた入力であり、分類はphoto-copy自身が行う。イメージキャプチャだけが「分類前の生ファイルをディスクに書き出す」という別の性質を持つため、この工程だけに専用の置き場を設ける。
+- 旧 `PhotoInbox/current/<機器>-<日付>` という命名（`~/Pictures/PhotoWork/backup/` 配下に残存）は、`docs/proposal.md` 4.1で既に「旧」と明記され移行対象とされている。同じ命名を新しい置き場へ引き継ぐと、PhotoWork内の旧構成と紛らわしくなるため採らない。新しい置き場は機器名だけの1階層とし、日付や状態をフォルダ名に含めない。
+
+### 設計上の制約
+
+- 旧 `PhotoInbox` / `ReadyForArchive` に残る実データの移行は、本決定の範囲に含めない（`docs/proposal.md` 4.1に記載のとおり別途行う）。
+- `docs/setup/mac.md` に、イメージキャプチャの実機画面の英語表記（`Import To:`、`Other...`、`Download`）とあわせて手順を記録する。

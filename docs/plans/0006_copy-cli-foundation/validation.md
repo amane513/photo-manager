@@ -214,13 +214,128 @@ GENERAL,SUB,TAKE,THMBNL}`）に対しても、`--only`による絞り込みが�
 
 無し。第1段階の`findmnt`のような実装依存の不具合は今回は見つからなかった。
 
+## 2026-09-12: iPhone 13由来のHEIC/MOVとXMPサイドカーの実機確認
+
+iPhone 13を実際にMacへ接続し、イメージキャプチャで代表ファイルを取り込む手順を
+再現しながら確認した。取り込み先はPhotoWork内の旧`PhotoInbox/current/`命名
+（機器名+日付）を踏襲せず、PhotoWorkの外に置く一時置き場
+`~/Pictures/PhoneImportInbox/iphone/`とした。理由は、proposal.md 4.1で
+「PhotoWorkとHDDを同じ相対構成にする」と定めており、イメージキャプチャが吐く
+未分類の生ファイルをPhotoWork直下に置くと分類済み構成の原則が崩れるため。
+生ファイルはphoto-copyで分類した後にPhotoWorkへ入れ、置き場自体は空にする運用
+とする。この置き場の設計はdocs/setup/mac.md反映時に取り込む。
+
+イメージキャプチャの実機画面はメニュー・ボタンが英語表記であり、次の対応関係を
+確認した（docs/setup/mac.md反映用のメモ）。
+
+| 案内時の想定表記 | 実機での表記 |
+|---|---|
+| 読み込み先 | Import To: |
+| その他... | Other... |
+| 読み込む | Download |
+
+取り込んだ代表ファイル（Live Photo＝`IMG_1527.HEIC`+`IMG_1527.MOV`の組、単独の
+`IMG_1526.MOV`、単独の`IMG_1525.HEIC`）を、`~/Pictures/PhoneImportInbox/iphone/`
+自体は変更せず`cp`で`~/tmp/photo-copy-iphone-check/`（隔離した作業ディレクトリ、
+確認後に削除）へ複製してから使用した。
+
+### 1. タグ優先順位と組の基準ファイル（HEIC/MOV）
+
+`metadata.capture_timestamps`を直接呼び出した。
+
+- `IMG_1525.HEIC`（単独）: `ExifIFD:DateTimeOriginal`から`20260912-153734`。
+- `IMG_1526.MOV`（単独）: `DateTimeOriginal`が無く、`MediaCreateDate`
+  （QuickTimeUTC変換後）から`20260912-153742`。
+- `IMG_1527.HEIC`+`IMG_1527.MOV`（Live Photoの組）: 両方とも`20260912-153751`
+  になった。HEIC単体の`DateTimeOriginal`（15:37:51.771）がそのままMOV側にも
+  適用されており、`planning.REFERENCE_PRIORITY`（`.arw` > `.heic` > `.jpg`/
+  `.jpeg` > `.mov` > `.mp4`）どおりHEICが基準ファイルとして選ばれることを
+  実データで確認した。
+- `planning.build_plan`（`--layout classify --device smartphone`）でも同じ結果
+  になり、4件とも`smartphone/`直下へ計画された（HEIC基準での同一日時プレフィックス
+  を確認）。
+
+### 2. 動画のTZ（退行が無いことの確認）
+
+`IMG_1526.MOV`の生のQuickTimeタグ（`-api QuickTimeUTC=1`無し）は`06:37:42`
+（オフセット無し、UTC相当）であり、`TZ`を明示せず変換すると実行ホストのTZ次第で
+結果が変わることをiPhone由来のMOVでも確認した（`TZ=UTC`では`20260912-063742`、
+`TZ=Asia/Tokyo`または未指定でホストがJSTの場合は`20260912-153742`）。これは
+Sony製MP4で確認済みの非対称性と同じであり、`decisions.md`の「動画のTZは固定値
+（`Asia/Tokyo`）とする」で既に解消済みであることを確認した。新たな決定は不要
+だった。
+
+### 3. XMPサイドカー
+
+このMac環境にはLightroomやCapture Oneは無く、darktable（5.6.0）のみ導入されて
+いた。`darktable-cli`単体（スタイル未指定）では現像履歴が無くXMPが書き出されな
+かったため、darktableのGUIで実際に`DSC00805.ARW`（SDカードの代表ARWを隔離した
+作業ディレクトリへ複製したもの）を開き、露出モジュールを操作して現像履歴を作り、
+実際の`DSC00805.ARW.xmp`を1件用意した。ARW自体もHEIC/MOVもコピー元は変更して
+いない。
+
+- 生成された`DSC00805.ARW.xmp`は`exif:DateTimeOriginal`と`darktable:history`
+  などを含む、想定どおりの`<原名>.ARW.xmp`形式だった。
+- `build_plan`（`--layout classify --device camera`）で、ARW+XMPの組は
+  `planning.py`の`.arw.xmp`特例により同一の日時プレフィックス
+  （`20260906-140415`）で`camera/`直下へ計画され、ARWが基準ファイルとして
+  使われることを確認した（XMPは基準ファイルにしないという決定どおり）。
+- 対応するARWが無い単独XMP（同じ内容を別名`DSC99999.ARW.xmp`として用意）は、
+  `--year-month`省略時は「組の基準ファイルがない」で未処理（`UNRESOLVED`）に
+  なり、`--year-month 2026-09`を明示すると原名のまま`camera/`直下へ配置される
+  ことを確認した。基準ファイル判定・配置規則への影響は無かった。
+
+### 4. rsync over SSHでの実配置
+
+Ubuntu（`ubuntu`）の`/mnt/camera_archive/photo-copy-test-20260912155947/`
+（試験後に削除）へ、HEIC/MOVの4件とARW+XMPの組を`--transport rsync-ssh`で
+実際に配置した。
+
+- HEIC/MOVの4件は`dry-run`で予定4件、実行で配置済み4件となり、
+  `smartphone/`直下に想定どおりの名前で配置された。
+- ARW+XMPの組は`camera/`直下に同一日時プレフィックスで配置された。
+- 確認後、試験先ディレクトリを`ssh ubuntu "rm -rf ..."`で削除し、残存が無い
+  ことを確認した。主HDDの既存配置（`2026/2026-08/`など）には触れていない。
+
+### 今回の実機確認で見つかった不具合
+
+無し。コード修正は行っていない（`.venv/bin/python -m unittest discover -s
+tests`は引き続き109件成功）。
+
+## 2026-09-12: インストール・設定・更新・確認スクリプトの実機再実行
+
+0006の残作業として、既存のMac/Ubuntu向けスクリプトを実機で再実行し、コードの
+進展（第2段階の実装、iPhoneの実機確認）を反映した状態でも冪等に動作すること
+を確認した。
+
+- Mac: `./scripts/mac/setup-copy-cli.sh --dry-run`→通常実行→
+  `./scripts/mac/verify-copy-cli.sh`を実行した。ExifTool・venvは既存のまま
+  再利用され、`pip install --editable`の再実行だけが行われた（`Successfully
+  installed photo-copy-0.1.0`で上書き導入を確認）。verifyはPython 3.10、
+  rsync 3.5.0、ExifTool 13.55、photo-copyを確認した。
+- Ubuntu: リポジトリが旧コミット（`e26181d`）のままだったため`git pull
+  --ff-only`で最新（`d299e2b`）へ更新してから、利用者が手元で
+  `sudo ./scripts/ubuntu/setup-copy-receiver.sh --dry-run`→通常実行→
+  `sudo ./scripts/ubuntu/verify-copy-receiver.sh --host-config
+  ./scripts/hosts/ubuntu-amane-yajima.env`を実行した。sudoのパスワード入力が
+  必要なため、非対話SSH（Claude側）では実行できず、利用者本人が実行した。
+  rsync・ExifToolは導入済みのまま更新されず、verifyは主HDDのUUID一致、書込み
+  権限、rsync 3.2.7、ExifTool 12.76を確認した。
+
+いずれも「既存の設定やデータを無断で上書きしない」「再実行しても壊れない」
+という`scripts/README.md`の実行規約どおりに動作した。
+
+### 今回の実機確認で見つかった不具合
+
+無し。
+
 ## 未確認事項（最新）
 
 - [x] ARW、JPG、MP4の代表メディア（Sony α7C II由来の実データ）で、
       `metadata.capture_timestamps`が想定どおりのタグを返すこと、組の基準ファイル
       （ARW優先）が実データでも一意に決まることを2026-09-12に確認した。
-- [ ] HEIC、MOV（iPhone 13由来）、XMPサイドカーの実データ確認は、イメージキャプチャ
-      での取り込み手順の再現とあわせて0007で行う。
+- [x] HEIC、MOV（iPhone 13由来）、XMPサイドカーの実データ確認を、イメージキャプチャ
+      での取り込み手順の再現とあわせて2026-09-12に行った。
 - [x] 動画（MOV/MP4）の`TZ`は2026-09-12に固定値（`Asia/Tokyo`）とする決定で解消した
       （`decisions.md`参照）。
 - [x] rsync over SSHの`facts()`/`digest()`が呼ぶリモートスクリプトは、Ubuntu標準の
@@ -234,6 +349,8 @@ GENERAL,SUB,TAKE,THMBNL}`）に対しても、`--only`による絞り込みが�
 - [x] （第1段階から持ち越し）`--only`と実機のSDカード構造（`DCIM/`・`PRIVATE/`の実際の
       階層）の組み合わせを2026-09-12に確認した。
 
-残るHEIC/MOV（iPhone由来）/XMPの実データ確認は0007（代表メディアでの配置・閲覧
-確認、イメージキャプチャでの取り込み手順の再現）で行う。0006としては、この項目を
-除き実機確認が完了している。
+HEIC/MOV（iPhone由来）/XMPを含め、0006の実機確認事項はすべて完了した。残る
+未着手はインストール・設定・更新・確認のスクリプト整備と、`docs/setup/mac.md`・
+`docs/setup/ubuntu.md`・`scripts/`の更新のみである。0007（代表メディアでの
+配置・閲覧確認）は、今回確認したイメージキャプチャの取り込み手順を引き継いで
+開始できる。

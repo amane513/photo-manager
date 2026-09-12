@@ -2,7 +2,7 @@
 
 このファイルでは、実施済み・進行中のプランと、[proposal.md](../proposal.md) を実現するための今後のプランを管理する。
 
-更新日: 2026-09-11。最新の方針変更は [0006](0006_copy-cli-foundation/plan.md) のrsync over SSH採用、運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
+更新日: 2026-09-12。[0006](0006_copy-cli-foundation/plan.md) は完了した。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
 
 ## 番号とフェーズの扱い
 
@@ -47,7 +47,7 @@
 | ID | 予定フォルダ | 状態 | 概要・完了の目安 | 前提 |
 |---|---|---|---|---|
 | 0005 | `0005_primary-storage-setup` | 完了 | 主HDDの固定マウント・権限・SMBを整備した。正本は1ルートとし、未マウント時の誤書込みを防ぐ。`docs/setup/` と `scripts/` に再構築手順を整備した | 0002 |
-| 0006 | [copy-cli-foundation](0006_copy-cli-foundation/plan.md) | 進行中 | 最小版でSD→HDDとMac→HDDにrsync over SSH、SD→Macにローカル転送を使う。撮影日時による年月分類・日時プレフィックス・フラット配置、基本的な保護、結果要約・ログを用意し、直後に内容一致に基づく同名スキップを追加する | ローカル実装は0004。主HDDのマウント・権限は0005。SSH接続は構築済み |
+| 0006 | [copy-cli-foundation](0006_copy-cli-foundation/plan.md) | 完了 | 最小版でSD→HDDとMac→HDDにrsync over SSH、SD→Macにローカル転送を使う。撮影日時による年月分類・日時プレフィックス・フラット配置、基本的な保護、結果要約・ログ、内容一致に基づく同名スキップ、プロファイルを実装し、代表メディア（ARW/JPEG/MP4/HEIC/MOV/XMP）と`docs/setup/`・`scripts/`を実機で確認した | ローカル実装は0004。主HDDのマウント・権限は0005。SSH接続は構築済み |
 
 ### 0006の段階分け
 
