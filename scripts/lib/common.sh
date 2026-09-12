@@ -30,7 +30,7 @@ load_host_config() {
   local required
   for required in \
     PRIMARY_STORAGE_UUID PRIMARY_STORAGE_FSTYPE ARCHIVE_MOUNT \
-    ARCHIVE_OWNER ARCHIVE_GROUP SMB_SHARE_NAME SMB_VALID_USER; do
+    ARCHIVE_OWNER ARCHIVE_GROUP SMB_SHARE_NAME SMB_VALID_USER SSH_HOST; do
     [[ -n "${!required:-}" ]] || die "ホスト設定に $required がない"
   done
 }

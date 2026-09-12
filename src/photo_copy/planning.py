@@ -264,4 +264,18 @@ def build_plan(
     else:
         planned = _build_classify_plan(request, remaining, timestamp_for=timestamp_for)
 
+    planned = [_reject_unsafe_destination_name(item) for item in planned]
+
     return tuple(sorted(excluded + planned, key=lambda item: str(item.source)))
+
+
+def _reject_unsafe_destination_name(item: PlannedItem) -> PlannedItem:
+    """配置先名に改行またはNULを含む場合は未処理にし、転送層へ渡さない。"""
+
+    if item.status is not ItemStatus.PLANNED or item.destination is None:
+        return item
+    if "\n" in str(item.destination) or "\0" in str(item.destination):
+        return PlannedItem(
+            item.source, None, item.timestamp, item.group_key, ItemStatus.UNRESOLVED, "配置先名に改行またはNULを含む"
+        )
+    return item
