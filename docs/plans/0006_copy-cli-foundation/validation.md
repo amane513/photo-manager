@@ -76,3 +76,33 @@ MacとUbuntu（`ubuntu`）の間で、`/mnt/camera_archive/photo-copy-test-20260
 - 中断（`TransferAborted`）相当のSSH切断を実機で起こす試験、`--only`と実際のSDカード構造の組み合わせは、
   0007以降でリスクの小さい方法を検討してから行う。
 - ARW、JPEG、HEIC、MOV、XMPの実データから撮影日時を取得し、組ファイルへ同じプレフィックスを付けられるかは未確認である。
+
+## 2026-09-12: 第2段階（段階1〜5）は自動テストのみで実装した。実機確認は未着手
+
+段階1〜5（撮影日時の一括取得・妥当性検査、`--year-month`省略時の自動分類、
+`facts()`/`digest()`によるサイズ+SHA-256の内容一致スキップ、再実行の安全性、
+プロファイル設定）はすべて`.venv/bin/python -m unittest discover -s tests`
+（107件、フェイク注入によるユニットテストのみ）で確認した実装であり、
+代表メディアや実機のUbuntu受信環境には一切触れていない。次の各点は
+実行していない確認であり、完了として扱わない。
+
+- ARW、HEIC、MOV、XMPの代表メディアで、`metadata.capture_timestamps`が
+  想定どおりのタグ（`DateTimeOriginal`→`MediaCreateDate`→`CreateDate`→
+  `TrackCreateDate`）を返すか、組の基準ファイル（`.arw`>`.heic`>`.jpg`/`.jpeg`
+  >`.mov`>`.mp4`）が実データのファイル名・拡張子でも一意に決まるか。
+- 動画（MOV/MP4）の`TZ`を固定値にするか実行ホストに任せるかは、
+  decisions.mdの未決定事項のままである。代表メディアでQuickTimeUTCの
+  変換結果を確認してから決める。
+- rsync over SSHの`facts()`/`digest()`が呼ぶリモートスクリプト
+  （`wc -c`、`sha256sum`、NUL区切りの`値\0パス\0`のやり取り）が、
+  Ubuntu標準のcoreutilsで実際に想定どおりの出力になるか。第1段階の
+  `findmnt`のように、フェイクが検出できない実装依存の不具合が
+  ある可能性がある。
+- 既存ファイルが多い範囲を`--layout classify`（省略した`--year-month`による
+  自動分類）や`--profile`で再実行した場合の、実際の所要時間（ExifToolの
+  一括呼び出し時間、リモートでのSHA-256計算時間、主HDDの読み出し時間）。
+- `--profile`/`--profile-config`を実際の`scripts/hosts/*.env`と組み合わせて
+  日常のコマンドを短縮できるか、`~/.config/photo-copy/profiles.ini`の
+  配置・パーミッションに関する実運用上の注意点。
+
+これらは0007（代表メディアでの配置・閲覧確認）と、その後の実機確認で扱う。
