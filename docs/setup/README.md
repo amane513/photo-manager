@@ -25,7 +25,9 @@
 | 範囲 | 状態 | 対応プラン |
 |---|---|---|
 | 主HDDのマウント・権限・SMB共有 | 整備済み | [0005](../plans/0005_primary-storage-setup/plan.md) |
-| SSH・rsyncによる取り込みCLIの導入 | 整備中（実機検証前） | 0006 |
+| SSH・rsyncによる取り込みCLIの導入 | 整備済み | [0006](../plans/0006_copy-cli-foundation/plan.md) |
 | 第2 HDDへのバックアップ | 未整備 | 0010 |
 | Immichの導入 | 未整備 | 0011 |
+| Mac側のSMBマウントの永続化 | 未整備 | 0008 |
 | Amazon Photos Desktopの設定 | 未整備 | 0008 |
+| 日常の取り込み運用手順 | 未整備 | 0009 |
