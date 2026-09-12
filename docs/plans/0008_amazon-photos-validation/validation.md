@@ -41,3 +41,19 @@
 - `tests/` を更新し（`test_hosts.py`、`test_rsync.py`、`test_cli.py`）、`.venv/bin/python -m unittest discover -s tests` が113件すべて成功することを確認した。
 - 実機で `photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` を実行し、`OK: 接続先 ubuntu、配置先ルート /mnt/camera_archive/photo-library、...` と、新しい既定の配置先で成功することを確認した（A12）。Macから `/Volumes/CameraArchive/photo-library/` が見えることも確認した（作成直後は空）。
 - Amazon Photos Desktopのバックアップ対象を「2026」フォルダから「photo-library」フォルダへ利用者が切り替えた。切替時点で中身は空だった。画面表記の詳細記録は省略し、切替完了の事実のみを記録する。
+
+## 2026-09-13: 段階4 代表メディアを置き直し、形式ごとのアップロードと再取得を確認する
+
+- SDカードから `DSC01139.{ARW,JPG}`（ARW+JPEGの組）と `PRIVATE/M4ROOT/CLIP/C0014.MP4`（動画）を、`--only` で3件に絞って `photo-copy copy --transport rsync-ssh`（`--destination-root` 省略）で主HDDへ配置した。`photo-library/2026/2026-09/camera/` に配置され、`--destination-root` の新しい既定がライブラリルート配下になることを確認した（A12）。動画は805MBあり、rsync転送がツールのコマンドタイムアウトを超えたためバックグラウンド実行で完了を確認した。
+- iPhoneからイメージキャプチャで `~/Pictures/PhoneImportInbox/iphone/` へHEIC単体1枚（`IMG_1525.HEIC`）とLive Photoの組1組（`IMG_1527.HEIC`+`.MOV`）を取り込み、`--device smartphone --transport local` でPhotoWorkへ分類後、`--layout preserve --transport rsync-ssh`（`--destination-root` 省略）で主HDDへ転送した。同じく `photo-library/2026/2026-09/smartphone/` に配置され、新しい既定の配置先で成功した。取り込み後 `PhoneImportInbox/iphone/` は空に戻した。
+- 配置した `20260912-111423_DSC01139.ARW` をdarktableでSMB経由で直接現像し、同じ `camera/` に `.xmp` と `_edit.jpg` を生成した（0007と同じ手順）。macOSが作った `._*` 補助ファイルと、rsyncで持ち込まれた `.DS_Store`／`._.DS_Store` は削除した。
+- 最終的にライブラリルートへ置いたのは、JPEG（撮って出し）・ARW・XMP・現像済みJPEG・動画（MP4）・HEIC単体・Live Photo（HEIC+MOV）の7種8ファイルである。年フォルダの追加操作はしておらず、Amazon側の対象指定は「photo-library」のままである。
+- Amazon Photos上で、配置した代表メディアのうちJPEG・ARW・現像済みJPEG・HEIC単体・HEIC（Live Photo側）の5件がアップロードされていることを利用者が確認した（A01）。動画の扱いは段階5で確認する。
+- 上記5件をAmazonから `~/Downloads/AmazonPhotos/` へダウンロードし、SHA-256とサイズを主HDD上の実体と比較した。5件とも完全に一致した（A02）。
+  - `20260912-111423_DSC01139.ARW`: `79bfb027f86cc9c48af005c87281940de01c051d1339358535982a98d9139a3d`
+  - `20260912-111423_DSC01139.JPG`: `0a05e9430765c9bc232838ea71d93ee709afa73bdc45fcd9da9c56c7dcbf99b8`
+  - `20260912-111423_DSC01139_edit.jpg`: `977872a829ef2b8726e487ae08f97385ac7f7e40095c2e14b4cc25c942c495a4`
+  - `20260912-153734_IMG_1525.HEIC`: `e9c157c94e20c45907e4ecdf83346e97cc6271f0ac698af86f00f5dcd5eb27a6`
+  - `20260912-153751_IMG_1527.HEIC`: `6b791605ed8aa1eb0951841ed431f1c29bd5ca0fa2276ca2eb46b4c8e2577071`
+- ダウンロードした5件はすべて問題なく開けることを利用者が確認した。HEICの表示・再取得もJPEGと同等に扱え、差異は見られなかった。
+- SDカードからのコピーとPhotoWork→HDDの転送を同じコマンドで再実行し、いずれも「スキップ3件」で内容一致による同一スキップが動くことを確認した（A12、rsync-ssh経由）。
