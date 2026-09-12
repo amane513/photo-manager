@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from photo_copy.cli import main
@@ -30,7 +31,7 @@ class CopyServiceTest(unittest.TestCase):
             original.write_bytes(b"raw")
             destination = root / "destination"
 
-            result = execute_copy(self.request(source, destination), timestamp_for=lambda _path: "20260911-143052")
+            result = execute_copy(self.request(source, destination), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
 
             target = destination / "2026" / "2026-09" / "camera" / "20260911-143052_DSC00001.ARW"
             self.assertEqual(result.counts()["copied"], 1)
@@ -45,7 +46,7 @@ class CopyServiceTest(unittest.TestCase):
             (source / "DSC00001.JPG").write_bytes(b"jpeg")
             destination = root / "destination"
 
-            result = execute_copy(self.request(source, destination, dry_run=True), timestamp_for=lambda _path: "20260911-143052")
+            result = execute_copy(self.request(source, destination, dry_run=True), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
 
             self.assertEqual(result.counts()["planned"], 1)
             self.assertFalse(destination.exists())
@@ -61,7 +62,7 @@ class CopyServiceTest(unittest.TestCase):
             target = destination / "20260911-143052_DSC00001.JPG"
             target.write_bytes(b"existing")
 
-            result = execute_copy(self.request(source, root / "destination"), timestamp_for=lambda _path: "20260911-143052")
+            result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
 
             self.assertEqual(result.items[0].status, ItemStatus.CONFLICT)
             self.assertEqual(target.read_bytes(), b"existing")
@@ -75,7 +76,7 @@ class CopyServiceTest(unittest.TestCase):
             (source / "DCIM" / "CLIP.MOV").write_bytes(b"one")
             (source / "PRIVATE" / "CLIP.MOV").write_bytes(b"two")
 
-            result = execute_copy(self.request(source, root / "destination"), timestamp_for=lambda _path: "20260911-143052")
+            result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
 
             self.assertEqual(result.counts()["conflict"], 2)
             self.assertFalse((root / "destination").exists())
@@ -90,13 +91,20 @@ class CopyServiceTest(unittest.TestCase):
             for path in (arw, jpeg, xmp):
                 path.write_bytes(b"data")
 
+            requested_paths: list[Path] = []
+
+            def timestamps_for(paths):
+                requested_paths.extend(paths)
+                return {path: "20260911-143052" for path in paths}
+
             plan = build_plan(
                 self.request(source, Path(directory) / "destination"),
-                timestamp_for=lambda path: "20260911-143052" if path == arw else "unexpected",
+                timestamps_for=timestamps_for,
             )
 
             self.assertEqual({item.timestamp for item in plan}, {"20260911-143052"})
             self.assertTrue(all(item.status is ItemStatus.PLANNED for item in plan))
+            self.assertEqual(requested_paths, [arw])
 
     def test_group_without_reference_is_unresolved_and_not_copied(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -106,11 +114,29 @@ class CopyServiceTest(unittest.TestCase):
             (source / "DSC00001.JPG").write_bytes(b"jpeg")
             (source / "DSC00001.ARW.xmp").write_bytes(b"xmp")
 
-            result = execute_copy(self.request(source, root / "destination"), timestamp_for=lambda _path: "20260911-143052")
+            result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
 
             self.assertEqual(result.counts()["unresolved"], 2)
             self.assertFalse((root / "destination").exists())
             self.assertIn("基準ファイルがない", result.items[0].reason or "")
+
+    def test_out_of_range_timestamp_is_unresolved_not_misplaced(self) -> None:
+        """カメラの時計リセット相当の日時は、推測で配置せず未処理として報告する。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg")
+
+            plan = build_plan(
+                self.request(source, root / "destination"),
+                timestamps_for=lambda paths: {p: "19700101-000000" for p in paths},
+                now=datetime(2026, 9, 12),
+            )
+
+            self.assertEqual(plan[0].status, ItemStatus.UNRESOLVED)
+            self.assertIn("19700101-000000", plan[0].reason or "")
 
     def test_unknown_format_is_reported_not_silently_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -119,7 +145,7 @@ class CopyServiceTest(unittest.TestCase):
             source.mkdir()
             (source / "notes.txt").write_text("keep")
 
-            result = execute_copy(self.request(source, root / "destination"), timestamp_for=lambda _path: None)
+            result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: None for p in paths})
 
             self.assertEqual(result.items[0].status, ItemStatus.UNRESOLVED)
             self.assertEqual(result_as_dict(result)["counts"]["unresolved"], 1)

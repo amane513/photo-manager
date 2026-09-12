@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .hosts import load_host_config
 from .local import LocalTransfer
+from .metadata import MetadataError, capture_timestamps, resolve_timezone
 from .models import CopyRequest, Device, Layout, TransferKind
 from .rsync import RsyncSshTransfer
 from .service import execute_copy, result_as_dict
@@ -51,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="--transport rsync-sshで必須。scripts/hosts/*.envを指定する",
+    )
+    copy.add_argument(
+        "--timezone",
+        default=None,
+        metavar="TZ",
+        help="ExifToolのQuickTimeUTC変換に使うTZ（省略時は実行ホストのタイムゾーン）",
     )
     copy.add_argument("--dry-run", action="store_true")
     copy.add_argument(
@@ -138,10 +145,13 @@ def _run_copy(parsed: argparse.Namespace) -> int:
         print(f"実行不能: {error}")
         return 2
 
+    timezone = parsed.timezone
+    timestamps_for = lambda paths: capture_timestamps(paths, tz=timezone)  # noqa: E731
+
     try:
         try:
-            result = execute_copy(request, transfer=transfer)
-        except (ValueError, NotImplementedError, TransferUnavailable) as error:
+            result = execute_copy(request, transfer=transfer, timestamps_for=timestamps_for)
+        except (ValueError, NotImplementedError, TransferUnavailable, MetadataError) as error:
             print(f"実行不能: {error}")
             return 2
     finally:
@@ -150,6 +160,7 @@ def _run_copy(parsed: argparse.Namespace) -> int:
             close()
 
     payload = result_as_dict(result)
+    payload["timezone"] = resolve_timezone(timezone)
     if isinstance(transfer, RsyncSshTransfer):
         payload["rsync_versions"] = {"local": transfer.local_rsync_version, "remote": transfer.remote_rsync_version}
 

@@ -67,7 +67,7 @@ class TransferProtocolTest(unittest.TestCase):
             transfer = FakeTransfer(existing={target})
             result = execute_copy(
                 self.request(source, destination_root),
-                timestamp_for=lambda _path: "20260911-143052",
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
                 transfer=transfer,
             )
 
@@ -89,7 +89,7 @@ class TransferProtocolTest(unittest.TestCase):
             transfer = FakeTransfer(fail_on={failing})
             result = execute_copy(
                 self.request(source, destination_root),
-                timestamp_for=lambda _path: "20260911-143052",
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
                 transfer=transfer,
             )
 
@@ -111,7 +111,7 @@ class TransferProtocolTest(unittest.TestCase):
             transfer = FakeTransfer(abort_on={aborting})
             result = execute_copy(
                 self.request(source, destination_root),
-                timestamp_for=lambda _path: "20260911-143052",
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
                 transfer=transfer,
             )
 

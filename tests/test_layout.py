@@ -88,7 +88,7 @@ class LayoutModeTest(unittest.TestCase):
 
             result = execute_copy(
                 self.classify_request(source, destination_root),
-                timestamp_for=lambda _path: "20260912-000000",
+                timestamps_for=lambda paths: {p: "20260912-000000" for p in paths},
             )
 
             self.assertEqual(result.counts()["unresolved"], 1)
@@ -154,7 +154,7 @@ class LayoutModeTest(unittest.TestCase):
 
             result = execute_copy(
                 self.classify_request(source, root / "destination"),
-                timestamp_for=lambda _path: "20260911-143052",
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
             )
 
             self.assertEqual(result.counts()["excluded"], 2)
@@ -171,7 +171,7 @@ class LayoutModeTest(unittest.TestCase):
 
             result = execute_copy(
                 self.classify_request(source, root / "destination", only=("DCIM",)),
-                timestamp_for=lambda _path: "20260911-143052",
+                timestamps_for=lambda paths: {p: "20260911-143052" for p in paths},
             )
 
             self.assertEqual(len(result.items), 1)

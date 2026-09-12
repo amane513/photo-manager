@@ -26,7 +26,7 @@ def _default_transfer(request: CopyRequest) -> Transfer:
 def execute_copy(
     request: CopyRequest,
     *,
-    timestamp_for=None,
+    timestamps_for=None,
     transfer: Transfer | None = None,
 ) -> CopyResult:
     """計画を作り、転送層の4操作だけを使ってコピーを実行する。
@@ -45,7 +45,7 @@ def execute_copy(
     if transfer is None:
         transfer = _default_transfer(request)
 
-    plan = build_plan(request, **({"timestamp_for": timestamp_for} if timestamp_for else {}))
+    plan = build_plan(request, **({"timestamps_for": timestamps_for} if timestamps_for else {}))
 
     transfer.preflight()
 

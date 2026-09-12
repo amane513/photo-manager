@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable, Sequence
+from datetime import datetime
 from pathlib import Path
 
-from .metadata import MetadataError, capture_timestamp
+from .metadata import capture_timestamps, is_timestamp_in_valid_range
 from .models import CopyRequest, ItemStatus, Layout, PlannedItem
 
 
@@ -132,13 +133,33 @@ def _validated_year_month(value: str) -> tuple[str, str]:
     return match.group(1), match.group(2)
 
 
+def _reference_paths_by_key(groups: dict[str, list[Path]]) -> dict[str, Path | None]:
+    """各組について、日時取得に使う基準ファイルだけを決める。
+
+    非基準メンバー（JPEG、XMP、MOVなど）にはExifToolを呼ばないため、この時点では
+    まだ日時を読まない。
+    """
+
+    reference_by_key: dict[str, Path | None] = {}
+    for key, members in groups.items():
+        supported = [member for member in members if _is_supported(member)]
+        if not supported:
+            continue
+        reference = _reference_member(supported)
+        if reference is None and len(supported) == 1:
+            reference = supported[0]
+        reference_by_key[key] = reference
+    return reference_by_key
+
+
 def _build_classify_plan(
     request: CopyRequest,
     files: Iterable[Path],
     *,
-    timestamp_for: Callable[[Path], str | None],
+    timestamps_for: Callable[[Sequence[Path]], dict[Path, str | None]],
+    now: datetime | None = None,
 ) -> list[PlannedItem]:
-    """撮影日時を読み、組を判定して分類・改名する計画を作る。"""
+    """撮影日時を一括で読み、組を判定して分類・改名する計画を作る。"""
 
     candidates: list[Path] = []
     planned: list[PlannedItem] = []
@@ -158,6 +179,12 @@ def _build_classify_plan(
             candidates.append(path)
 
     groups = _members_by_key(request.source, candidates)
+    reference_by_key = _reference_paths_by_key(groups)
+
+    # 基準ファイルだけを一括でExifToolへ渡す。組の非基準メンバーは読まない。
+    reference_paths = sorted({path for path in reference_by_key.values() if path is not None}, key=str)
+    timestamps = timestamps_for(reference_paths) if reference_paths else {}
+
     for key in sorted(groups):
         members = sorted(groups[key], key=lambda path: str(path))
         unsupported = [member for member in members if not _is_supported(member)]
@@ -167,26 +194,23 @@ def _build_classify_plan(
         if not supported:
             continue
 
-        reference = _reference_member(supported)
-        try:
-            timestamp = timestamp_for(reference) if reference is not None else None
-            if reference is None and len(supported) == 1:
-                timestamp = timestamp_for(supported[0])
-        except MetadataError as error:
-            timestamp = None
-            reason = str(error)
-        else:
-            reason = None
+        reference = reference_by_key.get(key)
+        timestamp = timestamps.get(reference) if reference is not None else None
 
-        if timestamp is None or TIMESTAMP_PATTERN.fullmatch(timestamp) is None:
+        reason: str | None = None
+        if timestamp is None:
             if reference is not None:
-                reason = reason or "組の基準ファイルから撮影日時を取得できない"
+                reason = "組の基準ファイルから撮影日時を取得できない"
             elif len(supported) > 1:
                 reason = "組の基準ファイルがない"
             else:
-                reason = reason or "撮影日時を取得できない"
-            if timestamp is not None and TIMESTAMP_PATTERN.fullmatch(timestamp) is None:
-                reason = "撮影日時の形式が不正である"
+                reason = "撮影日時を取得できない"
+        elif TIMESTAMP_PATTERN.fullmatch(timestamp) is None:
+            reason = "撮影日時の形式が不正である"
+        elif not is_timestamp_in_valid_range(timestamp, now=now):
+            reason = f"撮影日時が範囲外である（1990-01-01以降かつ実行時刻の翌日以前ではない）: {timestamp}"
+
+        if reason is not None:
             for member in supported:
                 planned.append(PlannedItem(member, None, None, key, ItemStatus.UNRESOLVED, reason))
             continue
@@ -243,7 +267,8 @@ def _build_preserve_plan(request: CopyRequest, files: Iterable[Path]) -> list[Pl
 def build_plan(
     request: CopyRequest,
     *,
-    timestamp_for: Callable[[Path], str | None] = capture_timestamp,
+    timestamps_for: Callable[[Sequence[Path]], dict[Path, str | None]] = capture_timestamps,
+    now: datetime | None = None,
 ) -> tuple[PlannedItem, ...]:
     """コピー元を変更せず、実行前に全ファイルの配置先を決める。
 
@@ -251,6 +276,9 @@ def build_plan(
     取得できない組は全員を未処理にする。``layout=preserve`` では撮影日時を読まず、
     コピー元からの相対配置をそのまま配置先へ写す。いずれのモードでも、モードの
     取り違えを入力の形から検出して未処理にし、OSが作る雑多ファイルは除外にする。
+
+    ``timestamps_for`` は基準ファイルの一覧を受け取り、まとめて撮影日時を返す関数
+    である。ExifToolの起動回数を抑えるため、組の非基準メンバーには適用しない。
     """
 
     _validate_layout_arguments(request)
@@ -262,7 +290,7 @@ def build_plan(
     if request.layout is Layout.PRESERVE:
         planned = _build_preserve_plan(request, remaining)
     else:
-        planned = _build_classify_plan(request, remaining, timestamp_for=timestamp_for)
+        planned = _build_classify_plan(request, remaining, timestamps_for=timestamps_for, now=now)
 
     planned = [_reject_unsafe_destination_name(item) for item in planned]
 
