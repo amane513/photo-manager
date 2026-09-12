@@ -37,7 +37,8 @@ _PREFLIGHT_FACTS_SCRIPT = (
     'destination_root="$2"\n'
     'printf "OWNER=%s\\n" "$(id -un)"\n'
     'if mountpoint -q -- "$archive_mount"; then printf "MOUNTED=1\\n"; else printf "MOUNTED=0\\n"; fi\n'
-    'printf "UUID=%s\\n" "$(findmnt -n -o UUID --target -- "$archive_mount" 2>/dev/null)"\n'
+    # findmntは--targetの引数の前に--（オプション終端）を置くと解釈に失敗するため付けない。
+    'printf "UUID=%s\\n" "$(findmnt -n -o UUID --target "$archive_mount" 2>/dev/null)"\n'
     'case "$destination_root" in\n'
     '  "$archive_mount"|"$archive_mount"/*) printf "DESTINATION_UNDER_MOUNT=1\\n" ;;\n'
     '  *) printf "DESTINATION_UNDER_MOUNT=0\\n" ;;\n'

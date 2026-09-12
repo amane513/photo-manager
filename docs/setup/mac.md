@@ -44,7 +44,7 @@ ExifToolはphoto-managerの構築対象である。スクリプトはExifToolが
 
 ### 4. ローカルコピーを試験する
 
-0006の現時点では、`local` 転送だけを実装している。実写真や既存のライブラリを使わず、一時ディレクトリへ小さな試験ファイルを作成して確認する。コピー元は変更・削除されず、保存先は撮影日時のメタデータを取得できたファイルだけで構成される。
+`--layout classify`（既定）は撮影日時を読み、組を判定して `YYYY/YYYY-MM/{camera,smartphone}/` 直下へ改名・分類する。実写真や既存のライブラリを使わず、一時ディレクトリへ小さな試験ファイルを作成して確認する。コピー元は変更・削除されず、保存先は撮影日時のメタデータを取得できたファイルだけで構成される。
 
 ```sh
 trial_root="$(mktemp -d)"
@@ -67,10 +67,48 @@ cp /path/to/a-small-test-file.jpg "$trial_root/source/DCIM/"
 <保存先ルート>/2026/2026-09/camera/20260911-143052_<原名>
 ```
 
-コマンドは要約を表示し、詳細を `--log-dir` のJSONファイルへ保存する。`--log-dir` を指定しない場合は、実行時のカレントディレクトリに `.photo-copy-logs/` を作成する。衝突、失敗、未処理がなければ終了コードは0であり、いずれかがあれば1である。引数や転送種別が不正で実行できない場合は2である。
+経路c（`PhotoWork` からUbuntuの主HDDへの転送）に相当する、既存の相対配置を維持する場合は `--layout preserve` を使う。この場合 `--year-month` と `--device` は指定できず、ExifToolも呼ばない。コピー元からの相対パスが `YYYY/YYYY-MM/{camera,smartphone}/名前` のちょうど4階層でない場合や、シンボリックリンクの場合は未処理として報告する。
+
+```sh
+.venv/bin/photo-copy copy \
+  --source "$trial_root/photowork" \
+  --destination-root "$trial_root/destination" \
+  --layout preserve \
+  --transport local \
+  --dry-run \
+  --log-dir "$trial_root/logs"
+```
+
+`--only` を指定すると、`--source` からの相対パスの部分木だけを対象にできる（繰り返し指定可）。絶対パスや `..` を含む指定は実行不能（終了コード2）になる。`.DS_Store` や `._` で始まるファイルなど、OSが作る雑多ファイルは両モードで自動的に除外され、要約と詳細ログに件数が残る。
+
+コマンドは要約を表示し、詳細を `--log-dir` のJSONファイルへ保存する。`--log-dir` を指定しない場合は、実行時のカレントディレクトリに `.photo-copy-logs/` を作成する。衝突、失敗、未処理がなければ終了コードは0であり、いずれかがあれば1である。引数や転送種別が不正、あるいはSSH接続先・主HDDの検査に失敗して実行できない場合は2である。
 
 ARW/JPEG/XMPの組はARW、HEIC/MOVの組はHEICの撮影日時を全ファイルへ適用する。基準ファイルがない、または基準ファイルから日時を取得できない組はコピーせず、コピー元を保持したまま未処理としてログへ記録する。未対応形式や日時を取得できない単体ファイルも同様である。
 
-`rsync-ssh` 転送は未実装であり、指定すると終了コード2で停止する。SSH接続先や実メディアを使う転送確認は、この転送層を実装してから隔離した試験先で行う。
+### 5. rsync over SSHでUbuntuの主HDDへコピーする
+
+`--transport rsync-ssh` は実装済みである。`--host-config` に `scripts/hosts/*.env`（[ubuntu.md](ubuntu.md) 参照）を指定する。接続だけを確認したい場合は `photo-copy check` を使う（転送を伴わない）。
+
+```sh
+.venv/bin/photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+```
+
+このコマンドは接続ユーザー、主HDDのマウントとUUID、配置先ルートの書き込み可否、Mac側・リモート側のrsyncバージョンを検査する。いずれかに失敗すると、転送を一切行わずに終了コード2で停止する。
+
+経路aの例（`--destination-root` を省略すると、ホスト設定の `ARCHIVE_MOUNT` が既定になる）。
+
+```sh
+.venv/bin/photo-copy copy \
+  --source /Volumes/<SDカード> \
+  --year-month 2026-09 \
+  --device camera \
+  --transport rsync-ssh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --dry-run
+```
+
+通常実行では `--dry-run` を外す。SSH接続はOpenSSHのControlMasterで多重化し、コピー元・配置先の組ごとにrsyncを1回呼ぶ。転送は `--times --itemize-changes --ignore-existing` を使い、コピー元削除・削除同期・インプレース書き込みは行わない。`--ignore-existing` によるスキップは内容一致とはみなさず、衝突として報告する。
+
+隔離した試験先で確認する場合は、`ARCHIVE_MOUNT` 配下に試験用のディレクトリを作り、そこを `--destination-root` に指定する。試験後は忘れずに削除する。
 
 Amazon Photos Desktopの設定は0008で追加する。SMBマウントは取り込みに使わず、Amazon Photosと必要時の参照用とする。

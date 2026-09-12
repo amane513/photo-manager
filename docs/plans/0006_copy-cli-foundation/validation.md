@@ -34,7 +34,45 @@ MacとUbuntu（`ubuntu`、192.168.11.17）の間で計測した。計測には�
 
 この計測に基づき、ファイルごとのrsync呼び出しとSSH多重化を採用した。詳細は `decisions.md` に記録した。
 
+## 2026-09-12: rsync over SSH転送層と配置モードの実機確認（第1段階）
+
+MacとUbuntu（`ubuntu`）の間で、`/mnt/camera_archive/photo-copy-test-20260912113048/`（試験後に削除）を
+配置先として実行した。実データや既存の配置（`/mnt/camera_archive/2026/2026-08/`）には触れていない。
+
+- `.venv/bin/python -m unittest discover -s tests` で58件が成功した（転送層分離、`--layout`両モード、
+  形の検査、除外区分、hosts.py、rsync.pyをフェイクのsubprocess.run注入で確認）。
+- `photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` が成功し、Mac側rsync 3.5.0、
+  リモートrsync 3.2.7、主HDDのUUID一致を確認した（C05）。
+- 実装当初、`findmnt -n -o UUID --target -- "$path"` が起動中のfindmnt（util-linux、Ubuntu標準）で
+  「--targetと--sourceはコマンドライン要素と併用できない」エラーになる不具合を実機で発見した。
+  `--target`の引数の前に`--`（オプション終端）を置かないよう`rsync.py`を修正した。ユニットテストの
+  フェイクはコマンドの構造しか見ておらず、この不具合を検出できなかった。
+- `--layout classify --transport rsync-ssh`で、DateTimeOriginalを書き込んだ試験用JPEGを
+  `<配置先>/2026/2026-09/camera/20260911-143052_DSC00001.JPG`へ実際に配置できた（C01）。
+  dry-runでは配置先に何も作られないことを確認した（C02）。コピー元は変更されなかった（C03）。
+  再実行では既存ファイルを`existing()`のSSH確認で検出し、上書きせず衝突として報告した（C04）。
+- `--layout preserve --transport rsync-ssh`で、既存の相対配置（`2026/2026-09/{camera,smartphone}/名前`）
+  を維持したまま2件を配置し、4階層でない`loose-file.jpg`を未処理として報告した（C15、C16の一方向）。
+- 読み取り不能な試験ファイル（`chmod 000`）を送ると、rsyncが終了コード23を返し、個別失敗として
+  構造化結果に記録された。他のファイルへの影響はない（C06の個別失敗側）。詳細ログに
+  `rsync_versions`（Mac側・リモート側）が記録されることも確認した（C08）。
+- `PRIMARY_STORAGE_UUID`を誤らせたホスト設定、`ARCHIVE_MOUNT`配下にない`--destination-root`、
+  存在しない`--destination-root`を、いずれも転送前に検出し実行不能（終了コード2）にした（C05）。
+  `--destination-root`が`ARCHIVE_MOUNT`配下にない場合はSSHへ接続する前にMac側だけで検出する。
+- ControlMasterのソケットは`/tmp/photo-copy-<uid>/cm-%C`に作られ、パーミッションが0700であること、
+  `close()`（`ssh -O exit`）で確実に破棄されることを確認した（ディレクトリが空になることで確認）。
+- ローカル転送（経路b相当）も同じCLIで実行し、`--transport local`で配置できることを確認した。
+
+### 今回確認できなかったこと
+
+- 転送中にSSH接続そのものが切断する中断（`TransferAborted`、終了コード1、23/24以外のrsync終了コード）は、
+  ユニットテスト（`tests/test_rsync.py`、`tests/test_transfer.py`）のフェイク注入でのみ確認した。
+  実機で意図的に接続を切る試験は、主HDDへの実害を避けるため今回は行っていない。
+- ARW、HEIC、MOV、XMPなど組ファイルの実データからの撮影日時取得は0007で確認する（未対応）。
+- `--only`と実機のSDカード構造（`DCIM/`・`PRIVATE/`の実際の階層）との組み合わせは未確認である。
+
 ## 未確認事項
 
-- MacからUbuntuへのSSH経由の実ファイル転送、主HDD切断時の中断、一時ファイル処理は、コピー本体の実装後に隔離した試験先で確認する。
+- 中断（`TransferAborted`）相当のSSH切断を実機で起こす試験、`--only`と実際のSDカード構造の組み合わせは、
+  0007以降でリスクの小さい方法を検討してから行う。
 - ARW、JPEG、HEIC、MOV、XMPの実データから撮影日時を取得し、組ファイルへ同じプレフィックスを付けられるかは未確認である。
