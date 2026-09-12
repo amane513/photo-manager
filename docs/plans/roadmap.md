@@ -2,7 +2,7 @@
 
 このファイルでは、実施済み・進行中のプランと、[proposal.md](../proposal.md) を実現するための今後のプランを管理する。
 
-更新日: 2026-09-12。[0006](0006_copy-cli-foundation/plan.md) と [0007](0007_media-workflow-validation/plan.md) は完了した。[0008](0008_amazon-photos-validation/plan.md) と [0009](0009_routine-import-operation/plan.md) のプランを作成し、0009は範囲を絞って改称した（下記フェーズ2を参照）。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
+更新日: 2026-09-12。[0006](0006_copy-cli-foundation/plan.md) と [0007](0007_media-workflow-validation/plan.md) は完了した。[0008](0008_amazon-photos-validation/plan.md) と [0009](0009_routine-import-operation/plan.md) のプランを作成し、0009は範囲を絞って改称した（下記フェーズ2を参照）。Amazon Photosがマウント直下の1階層下しか対象にできないため、主HDDのライブラリルートを `/mnt/camera_archive/photo-library/` へ下げる作業を0008に追加した。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
 
 ## 番号とフェーズの扱い
 
@@ -67,7 +67,7 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 | ID | プラン / 予定フォルダ | 状態 | 概要・完了の目安 | 前提 |
 |---|---|---|---|---|
 | 0007 | [media-workflow-validation](0007_media-workflow-validation/plan.md) | 完了 | CLIでの配置・閲覧を基本確認とし、選別・現像は必要時の確認へ分離する | 0006の最小CLI。選別・現像の確認は後続の前提にしない |
-| 0008 | [amazon-photos-validation](0008_amazon-photos-validation/plan.md) | 未着手 | 既にHDDの2026フォルダをバックアップ中の構成について、形式ごとの再取得、動画除外、対象範囲、SMB再接続、Mac再起動後の追従、途中ファイル、ローカル削除の挙動を確認する。Mac側SMBマウントの永続化と、Amazon Photos Desktopの手順の正本化までを成果物に含める | 0005、0006の最小版。0007全体の完了は不要 |
+| 0008 | [amazon-photos-validation](0008_amazon-photos-validation/plan.md) | 未着手 | 既にHDDの2026フォルダをバックアップ中の構成について、形式ごとの再取得、動画除外、SMB再接続、Mac再起動後の追従、途中ファイル、ローカル削除の挙動を確認する。年ごとの対象追加をなくすため、ライブラリルートを `/mnt/camera_archive/photo-library/` へ1階層下げ、CLI・scripts・正本を追従させる。Mac側SMBマウントの永続化と、Amazon Photos Desktopの手順の正本化までを成果物に含める | 0005、0006の最小版。0007全体の完了は不要 |
 | 0009 | [routine-import-operation](0009_routine-import-operation/plan.md) | 未着手 | 両経路の通し確認は0006・0007で実施済みのため範囲を絞り、実運用規模の一括取り込み、日常運用手順とプロファイルの正本化、コピー元削除の判断条件の設計を行う。旧称 `0009_manual-archive-workflow` から改称した | 0008。0007のテストコピーが削除済みであること。コピー元の実削除は0010後 |
 
 ## フェーズ3: 保全と閲覧基盤
