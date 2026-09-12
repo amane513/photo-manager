@@ -5,12 +5,14 @@ CodexとClaude Codeが共有する指示をこのファイルに記載する。
 ## プロジェクト概要
 
 写真・動画管理環境（Sony α7C II、iPhone 13、MacBook Air、Ubuntu常時稼働PC + Immich、4TB HDD、Amazon Photos）の
-要件・構成・変更計画を管理するリポジトリ。現時点のコードは環境構築スクリプトだけであり、取り込みCLIなどのアプリケーションコードは含まない。
+要件・構成・変更計画を管理するリポジトリ。環境構築スクリプトに加え、写真・動画を配置するコピーCLIの実装を含む。
 
 - [docs/requirements.md](docs/requirements.md): 実現したいことと前提条件（正本）
 - [docs/proposal.md](docs/proposal.md): 現在採用している構成と運用の提案（正本）
 - [docs/setup/](docs/setup/): 新しいPCで環境を再構築するための手順（正本）
 - [scripts/](scripts/): 環境構築を自動化するスクリプト
+- [src/photo_copy/](src/photo_copy/): コピーCLI `photo-copy` の実装
+- [tests/](tests/): コピーCLIの自動テスト
 - [docs/plans/](docs/plans/): 変更単位の目的・範囲・手順・完了条件
 - [docs/archive/](docs/archive/): 現在の正本ではない検討案や過去の資料
 
@@ -50,6 +52,17 @@ CodexとClaude Codeが共有する指示をこのファイルに記載する。
 - `plan.md` と `validation.md` は当時の記録であり、再構築の手順としては使わない。
 
 詳細は [docs/setup/README.md](docs/setup/README.md) を参照する。
+
+## アプリケーションコード
+
+コピーCLI `photo-copy` を `src/photo_copy/` に置く。0006で構築中であり、利用手順の正本は [docs/setup/mac.md](docs/setup/mac.md) である。
+
+- 実行環境はプロジェクト専用の `.venv/`（Python 3.10以上）とする。導入は `scripts/mac/setup-copy-cli.sh`、検査は `scripts/mac/verify-copy-cli.sh` で行う。
+- 自動テストは `.venv/bin/python -m unittest discover -s tests` で実行する。標準ライブラリの unittest だけを使い、テスト用の依存を増やさない。
+- CLI層は引数処理と表示だけを担い、判断と実行は共通処理APIに置く。0014でGUIから同じAPIを使える形を保つ。
+- ExifTool、rsync、sshなどの外部コマンドは呼び出し可能オブジェクトとして注入し、テストで差し替えられるようにする。実機の接続先や実データに依存する自動テストを書かない。
+- テストは一時ディレクトリだけを使い、既存の写真ライブラリや主HDD上のデータを変更しない。
+- コメントとdocstringも日本語・常体とする。
 
 ## 設定の保守
 
