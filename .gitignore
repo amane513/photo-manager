@@ -4,6 +4,7 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.photo-copy-logs/
 
 # 秘密情報はコミットしない。ホスト固有の値は scripts/hosts/*.env に置く。
 scripts/hosts/*.secret.env
