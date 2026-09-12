@@ -75,6 +75,43 @@ class CopyServiceTest(unittest.TestCase):
             self.assertEqual(result.items[0].status, ItemStatus.CONFLICT)
             self.assertEqual(target.read_bytes(), b"existing")
 
+    def test_identical_existing_file_is_skipped_without_resending(self) -> None:
+        """サイズとSHA-256が一致する既存ファイルはスキップし、再送しない（再実行の正常系）。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"same-content")
+            destination = root / "destination" / "2026" / "2026-09" / "camera"
+            destination.mkdir(parents=True)
+            target = destination / "20260911-143052_DSC00001.JPG"
+            target.write_bytes(b"same-content")
+
+            result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
+
+            self.assertEqual(result.counts()["skipped"], 1)
+            self.assertEqual(result.counts()["copied"], 0)
+            self.assertEqual(target.read_bytes(), b"same-content")
+
+    def test_destination_occupied_by_directory_is_conflict_not_overwritten(self) -> None:
+        """同名の配置先が通常ファイルでない（ディレクトリなど）場合も上書きせず衝突にする。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg")
+            destination = root / "destination" / "2026" / "2026-09" / "camera"
+            occupied = destination / "20260911-143052_DSC00001.JPG"
+            occupied.mkdir(parents=True)
+
+            result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: "20260911-143052" for p in paths})
+
+            self.assertEqual(result.items[0].status, ItemStatus.CONFLICT)
+            self.assertIn("同名のファイル以外", result.items[0].reason or "")
+            self.assertTrue(occupied.is_dir())
+
     def test_two_inputs_with_same_destination_are_both_conflicts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

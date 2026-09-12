@@ -8,7 +8,8 @@ import uuid
 from collections.abc import Sequence
 from pathlib import Path
 
-from .transfer import SendOutcome, TransferFailed
+from .digest import file_digest
+from .transfer import DestinationFacts, SendOutcome, TransferFailed
 
 
 class LocalTransfer:
@@ -17,8 +18,27 @@ class LocalTransfer:
     def preflight(self) -> None:
         return None
 
-    def existing(self, destinations: Sequence[Path]) -> frozenset[Path]:
-        return frozenset(destination for destination in destinations if destination.exists())
+    def facts(self, destinations: Sequence[Path]) -> dict[Path, DestinationFacts]:
+        results: dict[Path, DestinationFacts] = {}
+        for destination in destinations:
+            if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+                results[destination] = DestinationFacts(exists=True, is_regular_file=False, size=None)
+            elif destination.exists():
+                results[destination] = DestinationFacts(
+                    exists=True, is_regular_file=True, size=destination.stat().st_size
+                )
+            else:
+                results[destination] = DestinationFacts(exists=False, is_regular_file=False, size=None)
+        return results
+
+    def digest(self, destinations: Sequence[Path]) -> dict[Path, str | None]:
+        results: dict[Path, str | None] = {}
+        for destination in destinations:
+            try:
+                results[destination] = file_digest(destination)
+            except OSError:
+                results[destination] = None
+        return results
 
     def ensure_directories(self, directories: Sequence[Path]) -> None:
         for directory in directories:

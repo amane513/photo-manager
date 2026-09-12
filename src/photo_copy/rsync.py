@@ -7,8 +7,8 @@ OpenSSHのControlMasterで多重化し、接続は ``preflight()`` で確立し�
 リモートへ渡す値はシェル文字列へ直接埋め込まない。検査・作成スクリプトは
 標準入力から与え、動的な値は位置引数として渡す。``_run_ssh`` がそれぞれの
 引数へ ``shlex.quote`` を通してから1つの文字列へ結合し、SSHへは常に単一の
-コマンド引数として渡す。既存確認だけは対象件数が多くなり得るため、位置引数
-ではなくNUL区切りの標準入力でやり取りする。
+コマンド引数として渡す。``facts()`` と ``digest()`` だけは対象件数が多くなり
+得るため、位置引数ではなくNUL区切りの標準入力でやり取りする。
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .hosts import HostConfig
-from .transfer import SendOutcome, TransferAborted, TransferFailed, TransferUnavailable
+from .transfer import DestinationFacts, SendOutcome, TransferAborted, TransferFailed, TransferUnavailable
 
 MIN_LOCAL_RSYNC_VERSION = (3, 2, 4)
 MIN_REMOTE_RSYNC_VERSION = (3, 2, 6)
@@ -53,10 +53,29 @@ _PREFLIGHT_FACTS_SCRIPT = (
 
 _ENSURE_DIRECTORIES_SCRIPT = 'set -eu\nfor dir; do\n  mkdir -p -- "$dir"\ndone\n'
 
-_EXISTING_CHECK_SCRIPT = (
+# 配置先ごとに「値\0パス\0」の並びで返す。存在しない場合はmissing、通常ファイル
+# 以外（ディレクトリやシンボリックリンクなど）が存在する場合はother、通常ファイル
+# が存在する場合はfile:<バイト数>とする。
+_FACTS_SCRIPT = (
     "set -u\n"
     "while IFS= read -r -d '' path; do\n"
-    "  if [ -e \"$path\" ]; then printf '%s\\0' \"$path\"; fi\n"
+    '  if [ -f "$path" ] && [ ! -L "$path" ]; then\n'
+    '    size=$(wc -c < "$path" 2>/dev/null | tr -d "[:space:]")\n'
+    "    printf 'file:%s\\0%s\\0' \"$size\" \"$path\"\n"
+    '  elif [ -e "$path" ] || [ -L "$path" ]; then\n'
+    "    printf 'other\\0%s\\0' \"$path\"\n"
+    "  else\n"
+    "    printf 'missing\\0%s\\0' \"$path\"\n"
+    "  fi\n"
+    "done\n"
+)
+
+# 配置先ごとに「SHA-256\0パス\0」の並びで返す。計算できない場合は値を空にする。
+_DIGEST_SCRIPT = (
+    "set -u\n"
+    "while IFS= read -r -d '' path; do\n"
+    '  sum=$(sha256sum -- "$path" 2>/dev/null | cut -d " " -f1)\n'
+    "  printf '%s\\0%s\\0' \"$sum\" \"$path\"\n"
     "done\n"
 )
 
@@ -78,6 +97,21 @@ def _parse_version(version_line: str) -> tuple[int, ...] | None:
 
 def _version_at_least(version: tuple[int, ...] | None, minimum: tuple[int, ...]) -> bool:
     return version is not None and version >= minimum
+
+
+def _parse_value_path_pairs(data: bytes) -> dict[str, str]:
+    """「値\\0パス\\0」の繰り返しを ``{パス: 値}`` の辞書へ変換する。"""
+
+    parts = data.split(b"\0")
+    # 末尾はセパレータの後の空要素であるため取り除く。
+    if parts and parts[-1] == b"":
+        parts = parts[:-1]
+    pairs: dict[str, str] = {}
+    for index in range(0, len(parts) - 1, 2):
+        value = parts[index].decode("utf-8", errors="replace")
+        path = parts[index + 1].decode("utf-8", errors="replace")
+        pairs[path] = value
+    return pairs
 
 
 def _parse_kv_lines(text: str) -> dict[str, str]:
@@ -200,17 +234,44 @@ class RsyncSshTransfer:
             raise TransferUnavailable(f"リモートのrsyncが3.2.6以上でない: {remote_version_line.strip()}")
         self.remote_rsync_version = remote_version_line.strip()
 
-    def existing(self, destinations: Sequence[Path]) -> frozenset[Path]:
-        """配置先の一覧をNUL区切りの標準入力で送り、存在するものだけを受け取る。"""
+    def facts(self, destinations: Sequence[Path]) -> dict[Path, DestinationFacts]:
+        """配置先の一覧をNUL区切りの標準入力で送り、存在するかとサイズを1回のSSHで受け取る。"""
 
         if not destinations:
-            return frozenset()
+            return {}
         payload = b"".join(str(destination).encode() + b"\0" for destination in destinations)
-        completed = self._run_ssh(["bash", "-c", _EXISTING_CHECK_SCRIPT], input_bytes=payload)
+        completed = self._run_ssh(["bash", "-c", _FACTS_SCRIPT], input_bytes=payload)
         if completed.returncode != 0:
-            raise TransferUnavailable(f"既存確認に失敗した: {_decode(completed.stderr).strip()}")
-        stdout = _decode(completed.stdout)
-        return frozenset(Path(item) for item in stdout.split("\0") if item)
+            raise TransferUnavailable(f"配置先の確認に失敗した: {_decode(completed.stderr).strip()}")
+        by_path = _parse_value_path_pairs(
+            completed.stdout if isinstance(completed.stdout, bytes) else completed.stdout.encode()
+        )
+        results: dict[Path, DestinationFacts] = {}
+        for destination in destinations:
+            value = by_path.get(str(destination))
+            if value is None or value == "missing":
+                results[destination] = DestinationFacts(exists=False, is_regular_file=False, size=None)
+            elif value.startswith("file:"):
+                size_text = value[len("file:") :]
+                size = int(size_text) if size_text.isdigit() else None
+                results[destination] = DestinationFacts(exists=True, is_regular_file=size is not None, size=size)
+            else:
+                results[destination] = DestinationFacts(exists=True, is_regular_file=False, size=None)
+        return results
+
+    def digest(self, destinations: Sequence[Path]) -> dict[Path, str | None]:
+        """配置先の一覧をNUL区切りの標準入力で送り、SHA-256を1回のSSHで受け取る。"""
+
+        if not destinations:
+            return {}
+        payload = b"".join(str(destination).encode() + b"\0" for destination in destinations)
+        completed = self._run_ssh(["bash", "-c", _DIGEST_SCRIPT], input_bytes=payload)
+        if completed.returncode != 0:
+            raise TransferUnavailable(f"配置先のハッシュ計算に失敗した: {_decode(completed.stderr).strip()}")
+        by_path = _parse_value_path_pairs(
+            completed.stdout if isinstance(completed.stdout, bytes) else completed.stdout.encode()
+        )
+        return {destination: (by_path.get(str(destination)) or None) for destination in destinations}
 
     def ensure_directories(self, directories: Sequence[Path]) -> None:
         """必要な配置先の親ディレクトリを、1回のSSHで ``mkdir -p`` する。"""

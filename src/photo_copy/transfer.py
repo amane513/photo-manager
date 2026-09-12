@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Protocol
@@ -27,14 +28,26 @@ class TransferUnavailable(RuntimeError):
     """``preflight()`` が転送を開始できないと判断した場合の例外。"""
 
 
+@dataclass(frozen=True)
+class DestinationFacts:
+    """配置先の状態。存在しない場合、``is_regular_file`` と ``size`` は意味を持たない。"""
+
+    exists: bool
+    is_regular_file: bool
+    size: int | None
+
+
 class Transfer(Protocol):
-    """共通処理が転送方式を知らずに使う4操作。"""
+    """共通処理が転送方式を知らずに使う5操作。"""
 
     def preflight(self) -> None:
         """接続先や書き込み可否を確認する。失敗時は ``TransferUnavailable`` を送出する。"""
 
-    def existing(self, destinations: Sequence[Path]) -> frozenset[Path]:
-        """配置先のうち、既に存在するものを返す。"""
+    def facts(self, destinations: Sequence[Path]) -> dict[Path, DestinationFacts]:
+        """配置先ごとに、存在するかと通常ファイルであればそのサイズを返す。"""
+
+    def digest(self, destinations: Sequence[Path]) -> dict[Path, str | None]:
+        """配置先ごとのSHA-256を返す。計算できない場合はNoneを返す。"""
 
     def ensure_directories(self, directories: Sequence[Path]) -> None:
         """配置先の親ディレクトリを作る。"""

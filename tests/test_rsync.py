@@ -10,7 +10,7 @@ from pathlib import Path
 
 from photo_copy.hosts import HostConfig
 from photo_copy.rsync import _ENSURE_DIRECTORIES_SCRIPT, _PREFLIGHT_FACTS_SCRIPT, RsyncSshTransfer
-from photo_copy.transfer import SendOutcome, TransferAborted, TransferFailed, TransferUnavailable
+from photo_copy.transfer import DestinationFacts, SendOutcome, TransferAborted, TransferFailed, TransferUnavailable
 
 
 def make_host_config(**overrides) -> HostConfig:
@@ -49,7 +49,8 @@ class FakeRun:
         self.calls: list[tuple[list[str], dict]] = []
         self.remote_facts_stdout = remote_facts_stdout
         self.local_rsync_version = local_rsync_version
-        self.existing_stdout = b""
+        self.facts_stdout = b""
+        self.digest_stdout = b""
         self.ensure_directories_result = completed(0)
         self.send_result = completed(0, stdout=b">f+++++++++ a.arw\n")
 
@@ -61,9 +62,11 @@ class FakeRun:
             return self.send_result
         if "-O" in command or "-M" in command:
             return completed(0)
-        # existing()はスクリプトを`bash -c`の引数として渡し、標準入力はデータ専用にする。
+        # facts()とdigest()はスクリプトを`bash -c`の引数として渡し、標準入力はデータ専用にする。
+        if "sha256sum" in command[-1]:
+            return completed(0, stdout=self.digest_stdout)
         if "while IFS=" in command[-1]:
-            return completed(0, stdout=self.existing_stdout)
+            return completed(0, stdout=self.facts_stdout)
         input_bytes = kwargs.get("input", b"")
         if input_bytes == _PREFLIGHT_FACTS_SCRIPT.encode():
             return completed(0, stdout=self.remote_facts_stdout)
@@ -161,37 +164,87 @@ class PreflightTest(unittest.TestCase):
             transfer.preflight()
 
 
-class ExistingTest(unittest.TestCase):
-    def test_existing_returns_only_paths_reported_by_remote(self) -> None:
+class FactsTest(unittest.TestCase):
+    def test_facts_reports_existing_missing_and_other(self) -> None:
         run = FakeRun(remote_facts_stdout=VALID_FACTS)
-        run.existing_stdout = b"/mnt/camera_archive/a.arw\0"
+        run.facts_stdout = (
+            b"file:12345\0/mnt/camera_archive/a.arw\0"
+            b"missing\0/mnt/camera_archive/b.arw\0"
+            b"other\0/mnt/camera_archive/c.arw\0"
+        )
         transfer = make_transfer(run)
 
-        result = transfer.existing([Path("/mnt/camera_archive/a.arw"), Path("/mnt/camera_archive/b.arw")])
+        result = transfer.facts(
+            [
+                Path("/mnt/camera_archive/a.arw"),
+                Path("/mnt/camera_archive/b.arw"),
+                Path("/mnt/camera_archive/c.arw"),
+            ]
+        )
 
-        self.assertEqual(result, frozenset({Path("/mnt/camera_archive/a.arw")}))
+        self.assertEqual(result[Path("/mnt/camera_archive/a.arw")], DestinationFacts(exists=True, is_regular_file=True, size=12345))
+        self.assertEqual(result[Path("/mnt/camera_archive/b.arw")], DestinationFacts(exists=False, is_regular_file=False, size=None))
+        self.assertEqual(result[Path("/mnt/camera_archive/c.arw")], DestinationFacts(exists=True, is_regular_file=False, size=None))
         _, kwargs = run.calls[-1]
-        self.assertEqual(kwargs["input"], b"/mnt/camera_archive/a.arw\0/mnt/camera_archive/b.arw\0")
+        self.assertEqual(
+            kwargs["input"],
+            b"/mnt/camera_archive/a.arw\0/mnt/camera_archive/b.arw\0/mnt/camera_archive/c.arw\0",
+        )
 
-    def test_existing_of_empty_sequence_does_not_call_ssh(self) -> None:
+    def test_facts_of_empty_sequence_does_not_call_ssh(self) -> None:
         run = FakeRun(remote_facts_stdout=VALID_FACTS)
         transfer = make_transfer(run)
 
-        self.assertEqual(transfer.existing([]), frozenset())
+        self.assertEqual(transfer.facts([]), {})
         self.assertEqual(run.calls, [])
 
-    def test_existing_failure_raises_transfer_unavailable(self) -> None:
-        class FailingExistingRun(FakeRun):
+    def test_facts_failure_raises_transfer_unavailable(self) -> None:
+        class FailingFactsRun(FakeRun):
             def __call__(self, command, **kwargs):
-                if command[0] == "ssh" and "while IFS=" in command[-1]:
+                if command[0] == "ssh" and "while IFS=" in command[-1] and "sha256sum" not in command[-1]:
                     self.calls.append((command, kwargs))
                     return completed(255, stderr=b"broken pipe")
                 return super().__call__(command, **kwargs)
 
-        transfer = make_transfer(FailingExistingRun(remote_facts_stdout=VALID_FACTS))
+        transfer = make_transfer(FailingFactsRun(remote_facts_stdout=VALID_FACTS))
 
         with self.assertRaises(TransferUnavailable):
-            transfer.existing([Path("/mnt/camera_archive/a.arw")])
+            transfer.facts([Path("/mnt/camera_archive/a.arw")])
+
+
+class DigestTest(unittest.TestCase):
+    def test_digest_returns_sha256_per_path(self) -> None:
+        run = FakeRun(remote_facts_stdout=VALID_FACTS)
+        run.digest_stdout = (
+            b"deadbeef\0/mnt/camera_archive/a.arw\0"
+            b"\0/mnt/camera_archive/b.arw\0"
+        )
+        transfer = make_transfer(run)
+
+        result = transfer.digest([Path("/mnt/camera_archive/a.arw"), Path("/mnt/camera_archive/b.arw")])
+
+        self.assertEqual(result[Path("/mnt/camera_archive/a.arw")], "deadbeef")
+        self.assertIsNone(result[Path("/mnt/camera_archive/b.arw")])
+
+    def test_digest_of_empty_sequence_does_not_call_ssh(self) -> None:
+        run = FakeRun(remote_facts_stdout=VALID_FACTS)
+        transfer = make_transfer(run)
+
+        self.assertEqual(transfer.digest([]), {})
+        self.assertEqual(run.calls, [])
+
+    def test_digest_failure_raises_transfer_unavailable(self) -> None:
+        class FailingDigestRun(FakeRun):
+            def __call__(self, command, **kwargs):
+                if command[0] == "ssh" and "sha256sum" in command[-1]:
+                    self.calls.append((command, kwargs))
+                    return completed(255, stderr=b"broken pipe")
+                return super().__call__(command, **kwargs)
+
+        transfer = make_transfer(FailingDigestRun(remote_facts_stdout=VALID_FACTS))
+
+        with self.assertRaises(TransferUnavailable):
+            transfer.digest([Path("/mnt/camera_archive/a.arw")])
 
 
 class EnsureDirectoriesTest(unittest.TestCase):

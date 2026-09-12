@@ -178,7 +178,7 @@ def _run_copy(parsed: argparse.Namespace) -> int:
     print(
         "結果: "
         f"コピー済み {counts['copied']}件、予定 {counts['planned']}件、"
-        f"衝突 {counts['conflict']}件、失敗 {counts['failed']}件、"
+        f"スキップ {counts['skipped']}件、衝突 {counts['conflict']}件、失敗 {counts['failed']}件、"
         f"未処理 {counts['unresolved']}件、除外 {counts['excluded']}件"
     )
     if result.aborted:

@@ -27,6 +27,7 @@ class ItemStatus(str, Enum):
 
     PLANNED = "planned"
     COPIED = "copied"
+    SKIPPED = "skipped"
     CONFLICT = "conflict"
     FAILED = "failed"
     UNRESOLVED = "unresolved"
