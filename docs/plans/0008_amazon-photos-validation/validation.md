@@ -70,7 +70,7 @@
   - ただし、Amazon Photos Desktop自体はSMB復旧を自動検知せず「DISCONNECTED」表示のままだった。利用者がアプリを再起動したところ「BACKUP COMPLETE」に変わり、バックアップが再開した。**自動での再開はしない**という重要な挙動上の制約であり、週次確認の手順に反映する（後述）。
 - **コピー途中の一時ファイル（A07）**: SDカードから未取り込みのARW+JPEG30件（15組）を`--transport rsync-ssh`で転送しながら、Ubuntu側を直接観測した。転送中に `.20260823-192648_DSC00316.ARW.brXSPu` のようなrsync既定の一時名（ドット始まり）が実際に存在することを確認した。Mac側のSMBマウント経由でも、通常の`ls`（`-a`なし）ではこの一時ファイルが見えず、`-a`を付けたときだけ見えることを確認した。転送中、Amazon Photos Desktopのアップロード履歴・キューには一時ファイルらしきものやエラーは見られなかった（利用者確認）。転送完了後、`find -name ".*"`でrsyncの一時ファイルが残っていないことを確認した（残っていたのはdarktableのSMB書き込みに伴う`._*`のAppleDoubleファイルのみで、0007から許容している既知の事象である）。
 - **スリープ復帰**: Macをスリープさせ復帰させたところ、SMBマウントとAmazon Photos Desktopのバックアップは問題なく継続した（利用者確認）。
-- **Mac再起動（A06）**: 未実施。このツールを使う作業セッション自体がMac上で動いているため、再起動するとセッションが強制終了する。再起動の実施と結果確認は、利用者による再起動後、新しいセッションで行う（下記「0009・0010へ渡す前提」参照）。
+- **Mac再起動（A06）**: 利用者がMacを再起動した後、新しいセッションで確認した。`uptime`が「up 3 mins」であることから再起動直後であることを確認したうえで、`/Volumes/CameraArchive`が既に自動マウントされていること（`mount`コマンドとLaunchAgentのログで確認。`mount-camera-archive.sh`が「マウントした」を記録していた）、マウント位置が `/Volumes/CameraArchive` のまま変わっていないこと、`verify-smb-mount.sh`がOKを返すことを確認した。Amazon Photos Desktopもバックアップを自動で再開した（利用者確認、手動でのアプリ起動は不要だった）。
 - **週次の進捗・停滞確認方法**: Amazon Photos Desktopのメイン画面の状態表示（「BACKUP COMPLETE」/「DISCONNECTED」等）を見るだけで足りることを確認した。「DISCONNECTED」表示を見つけた場合は、SMB再接続だけでは自動回復しないため、**アプリ自体を再起動する**ことを手順として明記する。週次でこの画面を開き、正常表示でなければアプリを再起動する、という運用でよい。
 
 ## 2026-09-13: 段階7 手順を正本へ反映する
@@ -89,6 +89,12 @@
 - **マウント方式**: MacのSMBマウントはLaunchAgent（`~/Library/LaunchAgents/com.photo-manager.mount-CameraArchive.plist`）でログイン時に自動接続する。マウント位置は `/Volumes/CameraArchive` のまま変わっていない。`scripts/mac/setup-smb-mount.sh`・`verify-smb-mount.sh` で再現・判定できる。
 - **主HDDに残っているもの**: `photo-library/2026/2026-09/` 配下に、段階4・6で配置した代表メディア・確認用メディア（ARW・JPEG・XMP・現像済みJPEG・動画・HEIC・Live Photoの組、および段階6のA07確認で転送した15組のARW+JPEG計30件）がある。これらは0008の実機確認の過程で配置したものであり、0007のような「削除前提のテストコピー」ではなく実データ（SDカード原本のコピー）である。0009で実運用規模の取り込みを始める際、そのまま正規の取り込み分として扱ってよい。
 - **未解決事項**:
-  - Mac再起動後のマウント・バックアップ自動復帰（A06）は、この作業セッション自体がMac上で動作していたため実施できなかった。次回、利用者がMacを再起動した後、新しいセッションで確認し、`plan.md`・本ファイルへ追記する。
-  - Amazon Photos Desktopは、SMB復旧を自動検知せずアプリの再起動が必要という挙動が判明した。0009以降の日常運用でも、週次確認時にこの点を踏まえる。
+  - Amazon Photos Desktopは、SMB復旧を自動検知せずアプリの再起動が必要という挙動が判明した（Mac再起動時は自動復帰した。A05の切断・再接続の場合に限る既知の制約）。0009以降の日常運用でも、週次確認時にこの点を踏まえる。
   - Amazon Photos削除前の件数（写真・動画の内訳）は記録できなかった（段階2参照）。実害はないが、完了条件としては保留のままである。
+
+## 2026-09-13: A06（Mac再起動後の自動復帰）確認
+
+- 利用者がMacを再起動した。新しいセッションで `uptime` が「up 3 mins」であることを確認し、再起動直後であることを確認した。
+- `/Volumes/CameraArchive` は既に自動マウントされており、マウント位置も変わっていなかった。`~/Library/Logs/photo-manager-mount-CameraArchive.log` に、LaunchAgentの`RunAtLoad`によって`mount-camera-archive.sh`が実行され「マウントした: /Volumes/CameraArchive」と記録されていた。`verify-smb-mount.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env` もOKを返した。
+- Amazon Photos Desktopのバックアップも、利用者の手動操作なしに自動で再開していることを確認した（利用者確認）。
+- これによりA06・A09が確認済みとなり、0008の全項目が完了した。
