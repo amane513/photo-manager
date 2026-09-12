@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .models import CopyRequest, Device, TransferKind
 from .service import execute_copy, result_as_dict
+from .transfer import TransferUnavailable
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,7 +63,7 @@ def main(arguments: list[str] | None = None) -> int:
     )
     try:
         result = execute_copy(request)
-    except (ValueError, NotImplementedError) as error:
+    except (ValueError, NotImplementedError, TransferUnavailable) as error:
         print(f"実行不能: {error}")
         return 2
 
@@ -76,5 +77,7 @@ def main(arguments: list[str] | None = None) -> int:
         f"コピー済み {counts['copied']}件、予定 {counts['planned']}件、"
         f"衝突 {counts['conflict']}件、失敗 {counts['failed']}件、未処理 {counts['unresolved']}件"
     )
+    if result.aborted:
+        print(f"中断: {result.abort_reason}")
     print(f"詳細ログ: {log_path}")
     return 0 if not (counts["conflict"] or counts["failed"] or counts["unresolved"]) else 1

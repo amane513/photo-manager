@@ -55,6 +55,8 @@ class CopyResult:
 
     request: CopyRequest
     items: tuple[PlannedItem, ...]
+    aborted: bool = False
+    abort_reason: str | None = None
 
     def counts(self) -> dict[str, int]:
         counts = {status.value: 0 for status in ItemStatus}
