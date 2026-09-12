@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from photo_copy.cli import main, parse_request
 from photo_copy.models import Device, Layout, TransferKind
@@ -100,3 +101,33 @@ class CopyRequestTest(unittest.TestCase):
         exit_code = main(["check", "--host-config", "/nonexistent/ubuntu.env"])
 
         self.assertEqual(exit_code, 2)
+
+    def test_rerun_of_fully_copied_source_exits_zero(self) -> None:
+        """C20: CLI経由でも、送信済みの範囲の再実行は全件スキップで正常終了する。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "DSC00001.JPG").write_bytes(b"jpeg-1")
+            logs = root / "logs"
+            args = [
+                "copy",
+                "--source",
+                str(source),
+                "--destination-root",
+                str(root / "destination"),
+                "--year-month",
+                "2026-09",
+                "--device",
+                "camera",
+                "--log-dir",
+                str(logs),
+            ]
+
+            with patch("photo_copy.cli.capture_timestamps", lambda paths, tz=None: {p: "20260911-143052" for p in paths}):
+                first_exit = main(args)
+                second_exit = main(args)
+
+            self.assertEqual(first_exit, 0)
+            self.assertEqual(second_exit, 0)

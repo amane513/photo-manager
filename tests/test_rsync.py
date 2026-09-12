@@ -4,12 +4,16 @@
 応答を返すフェイクを注入する。
 """
 
+import hashlib
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
 from photo_copy.hosts import HostConfig
+from photo_copy.models import CopyRequest, Device, TransferKind
 from photo_copy.rsync import _ENSURE_DIRECTORIES_SCRIPT, _PREFLIGHT_FACTS_SCRIPT, RsyncSshTransfer
+from photo_copy.service import execute_copy
 from photo_copy.transfer import DestinationFacts, SendOutcome, TransferAborted, TransferFailed, TransferUnavailable
 
 
@@ -339,6 +343,49 @@ class CloseTest(unittest.TestCase):
         command, _ = run.calls[-1]
         self.assertIn("-O", command)
         self.assertIn("exit", command)
+
+
+class RerunViaExecuteCopyTest(unittest.TestCase):
+    """段階4: rsync over SSH経由でも、内容一致による再実行のスキップが成立することを確認する。"""
+
+    def test_second_run_skips_via_facts_and_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            content = b"jpeg-content"
+            (source / "DSC00001.JPG").write_bytes(content)
+            destination_root = Path("/mnt/camera_archive")
+            target = destination_root / "2026" / "2026-09" / "camera" / "20260911-143052_DSC00001.JPG"
+
+            request = CopyRequest(
+                source=source,
+                destination_root=destination_root,
+                transfer_kind=TransferKind.RSYNC_SSH,
+                year_month="2026-09",
+                device=Device.CAMERA,
+            )
+            timestamps_for = lambda paths: {p: "20260911-143052" for p in paths}  # noqa: E731
+
+            # 1回目: 配置先が何も存在しないので転送する。
+            first_run = FakeRun(remote_facts_stdout=VALID_FACTS)
+            first_transfer = make_transfer(first_run, destination_root=destination_root)
+            first = execute_copy(request, timestamps_for=timestamps_for, transfer=first_transfer)
+            self.assertEqual(first.counts()["copied"], 1)
+
+            # 2回目: リモートに同じサイズ・同じSHA-256のファイルが既にあると応答する。
+            digest = hashlib.sha256(content).hexdigest()
+            second_run = FakeRun(remote_facts_stdout=VALID_FACTS)
+            second_run.facts_stdout = f"file:{len(content)}\0{target}\0".encode()
+            second_run.digest_stdout = f"{digest}\0{target}\0".encode()
+            second_transfer = make_transfer(second_run, destination_root=destination_root)
+            second = execute_copy(request, timestamps_for=timestamps_for, transfer=second_transfer)
+
+            self.assertEqual(second.counts()["skipped"], 1)
+            self.assertEqual(second.counts()["copied"], 0)
+            # スキップと確定したのでsend()（rsync呼び出し）は行わない。
+            rsync_calls = [call for call, _ in second_run.calls if call and call[0].endswith("rsync") and "--version" not in call]
+            self.assertEqual(rsync_calls, [])
 
 
 if __name__ == "__main__":  # pragma: no cover
