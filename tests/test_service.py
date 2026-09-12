@@ -11,7 +11,14 @@ from photo_copy.service import execute_copy, result_as_dict
 
 class CopyServiceTest(unittest.TestCase):
     def request(self, source: Path, destination: Path, *, dry_run: bool = False) -> CopyRequest:
-        return CopyRequest(source, destination, "2026-09", Device.CAMERA, TransferKind.LOCAL, dry_run)
+        return CopyRequest(
+            source=source,
+            destination_root=destination,
+            transfer_kind=TransferKind.LOCAL,
+            year_month="2026-09",
+            device=Device.CAMERA,
+            dry_run=dry_run,
+        )
 
     def test_copies_with_timestamp_prefix_without_changing_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

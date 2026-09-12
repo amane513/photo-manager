@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from .models import CopyRequest, Device, TransferKind
+from .models import CopyRequest, Device, Layout, TransferKind
 from .service import execute_copy, result_as_dict
 from .transfer import TransferUnavailable
 
@@ -15,11 +15,23 @@ from .transfer import TransferUnavailable
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="photo-copy")
     subcommands = parser.add_subparsers(dest="command", required=True)
-    copy = subcommands.add_parser("copy", help="明示年月でファイルをコピーする")
+    copy = subcommands.add_parser("copy", help="ファイルをコピーする")
     copy.add_argument("--source", type=Path, required=True)
     copy.add_argument("--destination-root", type=Path, required=True)
-    copy.add_argument("--year-month", required=True, metavar="YYYY-MM")
-    copy.add_argument("--device", choices=[member.value for member in Device], required=True)
+    copy.add_argument(
+        "--layout",
+        choices=[member.value for member in Layout],
+        default=Layout.CLASSIFY.value,
+        help="classify: 撮影日時で分類・改名する（既定）。preserve: 既存の相対配置を維持する。",
+    )
+    copy.add_argument("--year-month", metavar="YYYY-MM", help="layout=classifyで必須")
+    copy.add_argument("--device", choices=[member.value for member in Device], help="layout=classifyで必須")
+    copy.add_argument(
+        "--only",
+        action="append",
+        metavar="RELATIVE_PATH",
+        help="--sourceからの相対パスの部分木に絞り込む。繰り返し指定できる",
+    )
     copy.add_argument(
         "--transport",
         choices=[member.value for member in TransferKind],
@@ -35,32 +47,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def parse_request(arguments: list[str]) -> CopyRequest:
-    parsed = build_parser().parse_args(arguments)
+def _request_from_parsed(parsed: argparse.Namespace) -> CopyRequest:
     if parsed.command != "copy":  # pragma: no cover - argparseが保証する。
         raise ValueError(f"未対応のコマンドである: {parsed.command}")
     return CopyRequest(
         source=parsed.source,
         destination_root=parsed.destination_root,
-        year_month=parsed.year_month,
-        device=Device(parsed.device),
         transfer_kind=TransferKind(parsed.transport),
+        layout=Layout(parsed.layout),
+        year_month=parsed.year_month,
+        device=Device(parsed.device) if parsed.device is not None else None,
+        only=tuple(parsed.only) if parsed.only else (),
         dry_run=parsed.dry_run,
     )
+
+
+def parse_request(arguments: list[str]) -> CopyRequest:
+    return _request_from_parsed(build_parser().parse_args(arguments))
 
 
 def main(arguments: list[str] | None = None) -> int:
     parsed = build_parser().parse_args(arguments)
-    if parsed.command != "copy":  # pragma: no cover - argparseが保証する。
-        raise ValueError(f"未対応のコマンドである: {parsed.command}")
-    request = CopyRequest(
-        source=parsed.source,
-        destination_root=parsed.destination_root,
-        year_month=parsed.year_month,
-        device=Device(parsed.device),
-        transfer_kind=TransferKind(parsed.transport),
-        dry_run=parsed.dry_run,
-    )
+    request = _request_from_parsed(parsed)
     try:
         result = execute_copy(request)
     except (ValueError, NotImplementedError, TransferUnavailable) as error:
@@ -75,7 +83,8 @@ def main(arguments: list[str] | None = None) -> int:
     print(
         "結果: "
         f"コピー済み {counts['copied']}件、予定 {counts['planned']}件、"
-        f"衝突 {counts['conflict']}件、失敗 {counts['failed']}件、未処理 {counts['unresolved']}件"
+        f"衝突 {counts['conflict']}件、失敗 {counts['failed']}件、"
+        f"未処理 {counts['unresolved']}件、除外 {counts['excluded']}件"
     )
     if result.aborted:
         print(f"中断: {result.abort_reason}")

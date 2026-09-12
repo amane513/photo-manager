@@ -113,8 +113,10 @@ def result_as_dict(result: CopyResult) -> dict[str, object]:
     return {
         "source": str(result.request.source),
         "destination_root": str(result.request.destination_root),
+        "layout": result.request.layout.value,
         "year_month": result.request.year_month,
-        "device": result.request.device.value,
+        "device": result.request.device.value if result.request.device is not None else None,
+        "only": list(result.request.only),
         "transport": result.request.transfer_kind.value,
         "dry_run": result.request.dry_run,
         "aborted": result.aborted,

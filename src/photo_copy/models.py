@@ -15,6 +15,13 @@ class TransferKind(str, Enum):
     RSYNC_SSH = "rsync-ssh"
 
 
+class Layout(str, Enum):
+    """配置の決め方。分類するか、既存の相対配置を維持するかを利用者が明示する。"""
+
+    CLASSIFY = "classify"
+    PRESERVE = "preserve"
+
+
 class ItemStatus(str, Enum):
     """コピー計画または実行における各ファイルの状態。"""
 
@@ -23,17 +30,24 @@ class ItemStatus(str, Enum):
     CONFLICT = "conflict"
     FAILED = "failed"
     UNRESOLVED = "unresolved"
+    EXCLUDED = "excluded"
 
 
 @dataclass(frozen=True)
 class CopyRequest:
-    """明示年月で実行する最小版のコピー要求。"""
+    """最小版のコピー要求。
+
+    ``layout`` が ``classify`` の場合は ``year_month`` と ``device`` が必須であり、
+    ``preserve`` の場合はこの2つを指定できない。
+    """
 
     source: Path
     destination_root: Path
-    year_month: str
-    device: Device
     transfer_kind: TransferKind
+    layout: Layout = Layout.CLASSIFY
+    year_month: str | None = None
+    device: Device | None = None
+    only: tuple[str, ...] = ()
     dry_run: bool = False
 
 

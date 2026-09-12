@@ -44,7 +44,14 @@ class FakeTransfer:
 
 class TransferProtocolTest(unittest.TestCase):
     def request(self, source: Path, destination: Path) -> CopyRequest:
-        return CopyRequest(source, destination, "2026-09", Device.CAMERA, TransferKind.LOCAL, dry_run=False)
+        return CopyRequest(
+            source=source,
+            destination_root=destination,
+            transfer_kind=TransferKind.LOCAL,
+            year_month="2026-09",
+            device=Device.CAMERA,
+            dry_run=False,
+        )
 
     def test_conflict_is_decided_by_transfer_not_local_filesystem(self) -> None:
         """destination.exists() がFalseでも、転送層が既存と答えれば衝突にする。"""
