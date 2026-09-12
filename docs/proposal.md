@@ -2,7 +2,7 @@
 
 作成日: 2026-08-23
 
-更新日: 2026-09-11
+更新日: 2026-09-13
 
 対象: Sony α7C II、iPhone 13、MacBook Air、Ubuntu常時稼働PC
 
@@ -55,7 +55,9 @@ iPhone ─ イメージキャプチャ ─> Mac: PhotoWork ─ rsync over SSH �
 
 ### 4.1 Macと主HDD
 
-Macの `~/Pictures/PhotoWork/` とHDDの `/mnt/camera_archive/` 以下を、同じ相対構成とする。
+Macの `~/Pictures/PhotoWork/` とHDDの `/mnt/camera_archive/photo-library/` 以下を、同じ相対構成とする。
+
+主HDDの正本のルートは `/mnt/camera_archive/` 自体ではなく、その1階層下の `photo-library/` とする。Amazon Photos Desktopが、SMBでマウントしたボリューム自体（`/Volumes/CameraArchive`）をバックアップ対象に指定できず、その1つ下の階層のフォルダしか指定できないためである。年フォルダを `/mnt/camera_archive/` 直下に置くと、年が変わるたびに対象フォルダの追加が必要になり、追加を忘れるとその年が黙って保護されない。ライブラリルートを1階層下げることで、Amazonのバックアップ対象は `photo-library` の1フォルダに固定でき、年が変わっても対象指定を変えずに済む（0008）。SMBの共有名・共有パス（`CameraArchive` = `/mnt/camera_archive`）とMac側のマウント位置 `/Volumes/CameraArchive` は変わらない。Macの `~/Pictures/PhotoWork/` にはこの階層を追加しない。
 
 ```text
 <ルート>/
@@ -145,11 +147,11 @@ Amazonと第2 HDDのバックアップは別に進める。SD・iPhone・Macの�
 
 ## 6. Amazon Photos
 
-- Mac版Amazon Photos Desktopで、SMBマウントした主HDDの写真をバックアップする。Macの `PhotoWork/` は対象にしない。
-- JPEG、HEIC、ARW、現像済みJPEGを対象とし、動画を対象外にする。
-- SMB経由のバックアップ可否はユーザー確認済みである。形式ごとの再取得、動画除外、ローカル削除時の挙動、途中ファイルの扱いは0008で確認する。
+- Mac版Amazon Photos Desktopで、SMBマウントした主HDDの `photo-library/` フォルダ1つをバックアップ対象に指定する。Macの `PhotoWork/` は対象にしない。年が変わっても対象指定は変えない（0008、4.1参照）。
+- JPEG、HEIC、ARW、現像済みJPEGを対象とし、動画を対象外にする。動画は年月・機器別フォルダの中に静止画と混在しており対象フォルダの指定では分離できないが、アプリ側で自然に除外されることを0008で確認した。
+- SMB経由のバックアップ、形式ごとの再取得（SHA-256一致）、動画除外、ローカル削除時にAmazon側が残ること、転送中の一時ファイルを取り込まないことを0008で実機確認した。
 - HDDで削除した写真がAmazonに残っても整理しない。両者の完全一致を目指さない。
-- SMB切断・再接続、Mac再起動・スリープ復帰後の追従とマウント位置を確認する。Macとアプリが稼働し、共有に接続できる間に進む運用とする。
+- SMB切断時はアプリ上に「DISCONNECTED」等の状態が明示される。再接続するとMac側のマウントは自動で戻るが、**アプリ自体はSMB復旧を自動検知せず、手動での再起動が必要**である（0008で確認）。週次のバックアップ確認では、アプリの状態表示を見て、正常表示（バックアップ完了）でなければアプリを再起動する。
 - 取り込みごとの完了待ちはしない。週次のバックアップ確認時などに進捗・停滞をまとめて確認する。
 - 旧Macフォルダからアップロード済みのデータがある場合は少数で挙動を確認してから切り替える。不要写真の残存を許容しても、大量の意図しない重複は避ける。
 - iPhoneのAuto-Saveは無効とし、Amazonへの入口をこの経路に統一する。
@@ -171,7 +173,7 @@ iCloud+は採用しない。取り込み前のiPhone本体が唯一のコピー�
 
 ```yaml
 volumes:
-  - /mnt/camera_archive:/external/photo-library:ro
+  - /mnt/camera_archive/photo-library:/external/photo-library:ro
 ```
 
 ### 7.2 RAW除外

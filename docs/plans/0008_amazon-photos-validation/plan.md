@@ -4,7 +4,7 @@
 
 更新日: 2026-09-12
 
-状態: 着手中（段階5完了）
+状態: 段階1〜7実施済み。A06（Mac再起動後のマウント・バックアップ自動復帰の実機確認）のみ保留。次回、利用者がMacを再起動した後、新しいセッションで確認し、この項目のチェックと本ファイル・`validation.md`の更新をもって完了とする。
 
 ## 目的
 
@@ -103,11 +103,11 @@
 
 ### 段階7: 手順を正本へ反映する
 
-- [ ] 配置に関わる正本を更新する。[docs/proposal.md](../../proposal.md) 4.1のフォルダ構成図（ライブラリルートを1階層下げた理由を含む）と7.1のImmichのマウント指定（`/mnt/camera_archive/photo-library:/external/photo-library:ro`）、[docs/setup/ubuntu.md](../../setup/ubuntu.md) の正本ルートの記述と手順4・6の説明、[docs/setup/mac.md](../../setup/mac.md) の試験用ディレクトリの置き場所（`ARCHIVE_MOUNT` 配下ではなくライブラリルート配下）、`scripts/mac/profiles.ini.example` を更新する。
-- [ ] `docs/setup/mac.md` にSMBマウントの手順（スクリプトの実行と確認）と、Amazon Photos Desktopの手動手順（ログイン、対象フォルダの指定、動画除外、確認する画面）を追加する。現在の「Amazon Photos Desktopの設定は0008で追加する」の記述を置き換える。
-- [ ] `docs/setup/README.md` の整備状況を更新する。
-- [ ] iPhoneのAuto-Saveが無効であることを確認し、記録する。
-- [ ] 0009・0010へ渡す前提（ライブラリルートの位置、Amazonの対象フォルダの指定、マウント方式、主HDDに残っているもの、残した未確認事項）を `validation.md` に明記する。
+- [x] 配置に関わる正本を更新する。[docs/proposal.md](../../proposal.md) 4.1のフォルダ構成図（ライブラリルートを1階層下げた理由を含む）と7.1のImmichのマウント指定（`/mnt/camera_archive/photo-library:/external/photo-library:ro`）、[docs/setup/ubuntu.md](../../setup/ubuntu.md) の正本ルートの記述と手順4・6の説明、[docs/setup/mac.md](../../setup/mac.md) の試験用ディレクトリの置き場所（`ARCHIVE_MOUNT` 配下ではなくライブラリルート配下）、`scripts/mac/profiles.ini.example` を更新する。
+- [x] `docs/setup/mac.md` にSMBマウントの手順（スクリプトの実行と確認）と、Amazon Photos Desktopの手動手順（ログイン、対象フォルダの指定、動画除外、確認する画面）を追加する。現在の「Amazon Photos Desktopの設定は0008で追加する」の記述を置き換える。
+- [x] `docs/setup/README.md` の整備状況を更新する。
+- [x] iPhoneのAuto-Saveが無効であることを確認し、記録する。
+- [x] 0009・0010へ渡す前提（ライブラリルートの位置、Amazonの対象フォルダの指定、マウント方式、主HDDに残っているもの、残した未確認事項）を `validation.md` に明記する。
 
 ## 検討した代替案
 

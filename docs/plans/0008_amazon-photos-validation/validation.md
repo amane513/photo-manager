@@ -72,3 +72,23 @@
 - **スリープ復帰**: Macをスリープさせ復帰させたところ、SMBマウントとAmazon Photos Desktopのバックアップは問題なく継続した（利用者確認）。
 - **Mac再起動（A06）**: 未実施。このツールを使う作業セッション自体がMac上で動いているため、再起動するとセッションが強制終了する。再起動の実施と結果確認は、利用者による再起動後、新しいセッションで行う（下記「0009・0010へ渡す前提」参照）。
 - **週次の進捗・停滞確認方法**: Amazon Photos Desktopのメイン画面の状態表示（「BACKUP COMPLETE」/「DISCONNECTED」等）を見るだけで足りることを確認した。「DISCONNECTED」表示を見つけた場合は、SMB再接続だけでは自動回復しないため、**アプリ自体を再起動する**ことを手順として明記する。週次でこの画面を開き、正常表示でなければアプリを再起動する、という運用でよい。
+
+## 2026-09-13: 段階7 手順を正本へ反映する
+
+- [docs/proposal.md](../../proposal.md) 4.1（ライブラリルートを1階層下げた理由を含むフォルダ構成の説明）、6章（Amazon Photosの対象指定・動画除外・DISCONNECTED時の再起動が必要という挙動）、7.1（Immichのマウント指定を `/mnt/camera_archive/photo-library:/external/photo-library:ro` へ）を更新した。
+- [docs/setup/ubuntu.md](../../setup/ubuntu.md) の前提（ライブラリルートの位置と新設理由）を更新し、手順4として `setup-library-root.sh` を追加した（以降の手順番号を1つずつ繰り下げた）。手順5（検査）・7（未マウント確認、旧6）の説明にライブラリルートの判定を追記し、smbdワーカーがマウントを掴んで`umount`が失敗する場合の対処（段階6で実機確認した手順）も追記した。
+- [docs/setup/mac.md](../../setup/mac.md) に手順8（SMB共有の自動マウント設定、`setup-smb-mount.sh`／`verify-smb-mount.sh`）と手順9（Amazon Photos Desktopの手動設定：ログイン、対象フォルダの指定、動画除外の実態、週次確認とDISCONNECTED時のアプリ再起動）を追加した。手順5の `--destination-root` 省略時の既定説明と、隔離試験先の置き場所を `ARCHIVE_LIBRARY_ROOT` 配下へ更新した。
+- [scripts/mac/profiles.ini.example](../../../scripts/mac/profiles.ini.example) に、`destination-root` 省略時は `ARCHIVE_LIBRARY_ROOT` が既定になる旨のコメントを追加した（値自体の変更は不要）。
+- [docs/setup/README.md](../../setup/README.md) の整備状況表を更新し、「Mac側のSMBマウントの永続化」「Amazon Photos Desktopの設定」を整備済みにし、「主HDDのマウント・権限・SMB共有」の行にライブラリルートと0008を追記した。
+- iPhoneのAmazon Photos Auto-Saveが無効であることは、0008着手前から利用者が確認済みである（plan.mdの「現状」・検証項目A11参照）。0008では新たな設定変更は行わず、無効であることの確認記録のみを残す。
+
+### 0009・0010へ渡す前提
+
+- **ライブラリルートの位置**: 主HDDの正本は `/mnt/camera_archive/photo-library/` である。年フォルダはこの下に置く（`/mnt/camera_archive/` 直下ではない）。Macからは `/Volumes/CameraArchive/photo-library/...`。
+- **Amazonの対象フォルダ**: 「photo-library」の1フォルダのみを指定済みであり、年が変わっても対象指定の変更は不要である。動画（MP4/MOV）はアプリ側で自然に除外される。
+- **マウント方式**: MacのSMBマウントはLaunchAgent（`~/Library/LaunchAgents/com.photo-manager.mount-CameraArchive.plist`）でログイン時に自動接続する。マウント位置は `/Volumes/CameraArchive` のまま変わっていない。`scripts/mac/setup-smb-mount.sh`・`verify-smb-mount.sh` で再現・判定できる。
+- **主HDDに残っているもの**: `photo-library/2026/2026-09/` 配下に、段階4・6で配置した代表メディア・確認用メディア（ARW・JPEG・XMP・現像済みJPEG・動画・HEIC・Live Photoの組、および段階6のA07確認で転送した15組のARW+JPEG計30件）がある。これらは0008の実機確認の過程で配置したものであり、0007のような「削除前提のテストコピー」ではなく実データ（SDカード原本のコピー）である。0009で実運用規模の取り込みを始める際、そのまま正規の取り込み分として扱ってよい。
+- **未解決事項**:
+  - Mac再起動後のマウント・バックアップ自動復帰（A06）は、この作業セッション自体がMac上で動作していたため実施できなかった。次回、利用者がMacを再起動した後、新しいセッションで確認し、`plan.md`・本ファイルへ追記する。
+  - Amazon Photos Desktopは、SMB復旧を自動検知せずアプリの再起動が必要という挙動が判明した。0009以降の日常運用でも、週次確認時にこの点を踏まえる。
+  - Amazon Photos削除前の件数（写真・動画の内訳）は記録できなかった（段階2参照）。実害はないが、完了条件としては保留のままである。

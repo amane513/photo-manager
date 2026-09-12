@@ -12,6 +12,8 @@
 # コマンドライン引数はここに書いた値を上書きする。
 
 # 経路a: Macに挿したSDから、rsync over SSHでUbuntuの主HDDへ直接コピーする。
+# destination-rootを省略しているため、host-configのARCHIVE_LIBRARY_ROOT
+# （既定 /mnt/camera_archive/photo-library）が既定の配置先になる。
 [profile.sd-to-ubuntu]
 source = /Volumes/CameraSD
 device = camera
@@ -26,6 +28,7 @@ device = camera
 transport = local
 
 # 経路c: PhotoWork（既存の相対配置を維持したまま）から、rsync over SSHでUbuntuの主HDDへコピーする。
+# destination-rootを省略しているため、こちらもARCHIVE_LIBRARY_ROOTが既定になる。
 [profile.photowork-to-ubuntu]
 source = /Users/amaneyajima/Pictures/PhotoWork
 layout = preserve

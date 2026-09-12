@@ -5,7 +5,7 @@
 ## 前提
 
 - Ubuntu 64-bitをインストール済みで、sudoを実行できるアカウントがある。
-- 4TB主HDDを接続している。正本のルートは `/mnt/camera_archive` とする。
+- 4TB主HDDを接続している。マウント先は `/mnt/camera_archive` とする。正本のライブラリルート（年フォルダを置く場所）はその1階層下の `/mnt/camera_archive/photo-library/` である。Amazon Photos Desktopがマウント直下のボリューム自体を対象にできず1つ下のフォルダしか指定できないため、年フォルダを直下に置かずライブラリルートを新設している（0008、[proposal.md](../proposal.md) 4.1）。
 - Immichの作業データとPostgreSQLは内蔵SSDの `/srv/immich/` に置く。
 
 ## 手動で行う作業
@@ -57,22 +57,35 @@ sudo ./scripts/ubuntu/setup-primary-storage.sh \
 
 スクリプトはHDDをフォーマットしない。`/etc/fstab` に別のマウント定義がある場合や、共有名が競合する場合も停止するので、内容を確認してから移行する。
 
-### 4. 通常状態を検査する
+### 4. ライブラリルートを作成する
+
+年フォルダを置く正本のライブラリルート（`ARCHIVE_LIBRARY_ROOT`、既定 `/mnt/camera_archive/photo-library`）を、写真保存用アカウントの所有・0755で作成する。冪等であり、既に作成済みの場合は何もしない。
+
+```sh
+sudo ./scripts/ubuntu/setup-library-root.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --dry-run
+
+sudo ./scripts/ubuntu/setup-library-root.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+```
+
+### 5. 通常状態を検査する
 
 ```sh
 sudo ./scripts/ubuntu/verify-primary-storage.sh \
   --host-config ./scripts/hosts/ubuntu-amane-yajima.env
 ```
 
-この検査は、UUIDに対応するHDDが `/mnt/camera_archive` にマウントされ、fstab、所有者・権限、Sambaサービスが揃っていることを判定する。
+この検査は、UUIDに対応するHDDが `/mnt/camera_archive` にマウントされ、fstab、所有者・権限、Sambaサービス、そしてライブラリルート（`ARCHIVE_LIBRARY_ROOT`）の存在・所有者・権限が揃っていることを判定する。
 
-### 5. MacからSMBを確認する
+### 6. MacからSMBを確認する
 
-Finderで `smb://<UbuntuのIPアドレス>/CameraArchive` に接続し、`amane-yajima` で認証する。テストファイルを作成、開き、削除してUbuntu側でも反映を確認する。SMBはAmazon Photosと必要時のFinder・現像ツールからの参照用とし、取り込みCLIの転送には使わない。
+Finderで `smb://<UbuntuのIPアドレス>/CameraArchive` に接続し、`amane-yajima` で認証する。`photo-library/` の下にテストファイルを作成、開き、削除してUbuntu側でも反映を確認する。SMBはAmazon Photosと必要時のFinder・現像ツールからの参照用とし、取り込みCLIの転送には使わない。
 
-### 6. 未マウント時の誤書込み防止を確認する
+### 7. 未マウント時の誤書込み防止を確認する
 
-Macで共有を切断し、Ubuntuで開いているファイルがないことを確認してから実行する。この確認中は共有を使えない。
+Macで共有を切断し、Ubuntuで開いているファイルがないことを確認してから実行する。この確認中は共有を使えない。稼働中のsmbdワーカーがマウントを掴んでいて `umount` が `target is busy` になる場合は、`sudo lsof +D /mnt/camera_archive` で該当プロセスを特定し、Mac側が既に切断済みであることを確認したうえで終了させてから再試行する。
 
 ```sh
 sudo umount /mnt/camera_archive
@@ -83,9 +96,9 @@ sudo ./scripts/ubuntu/verify-primary-storage.sh \
   --host-config ./scripts/hosts/ubuntu-amane-yajima.env
 ```
 
-未マウント時のマウントポイントがroot所有・0755であり、写真保存用アカウントが書き込めないことを確認する。検査が失敗した場合は再マウントせず原因を修正する。
+未マウント時のマウントポイントがroot所有・0755であり、写真保存用アカウントが書き込めないこと、そしてライブラリルート（`ARCHIVE_LIBRARY_ROOT`）が存在しないことを確認する。検査が失敗した場合は再マウントせず原因を修正する。
 
-### 7. コピー受信環境を整備する
+### 8. コピー受信環境を整備する
 
 rsync over SSHの受信に必要なrsyncと、撮影日時の確認に使うExifToolを導入する。Ubuntuではapt標準のrsync 3.2.6以上を前提とし、より新しい版への更新は行わない。現在の実機では3.2.7を確認している。
 
@@ -96,7 +109,7 @@ sudo ./scripts/ubuntu/setup-copy-receiver.sh
 
 スクリプトは不足する `rsync` と `libimage-exiftool-perl` だけを導入する。既に導入済みのパッケージを更新・再インストールしない。
 
-### 8. コピー受信環境を検査する
+### 9. コピー受信環境を検査する
 
 ```sh
 sudo ./scripts/ubuntu/verify-copy-receiver.sh \

@@ -10,9 +10,10 @@ SDカードとiPhoneからの取り込み、必要時の選別・現像、Amazon
 
 ## 手動で行う作業
 
-- Amazon Photos Desktopのインストール後のログインと、バックアップ対象フォルダの指定。
+- Amazon Photos Desktopのインストール、ログイン、バックアップ対象フォルダの指定（手順9）。
 - 現像ツールのライセンスやアカウントが必要な場合の初回設定。
 - iPhoneを初めてこのMacへ接続したときに、iPhone側で「このコンピュータを信頼しますか？」を許可する。
+- SMB共有のパスワードをキーチェーンへ保存する初回のFinder接続（手順8）。
 
 ## 手順
 
@@ -102,7 +103,7 @@ ARW/JPEG/XMPの組はARW、HEIC/MOVの組はHEICの撮影日時を全ファイ�
 
 このコマンドは接続ユーザー、主HDDのマウントとUUID、配置先ルートの書き込み可否、Mac側・リモート側のrsyncバージョンを検査する。いずれかに失敗すると、転送を一切行わずに終了コード2で停止する。
 
-経路aの例（`--destination-root` を省略すると、ホスト設定の `ARCHIVE_MOUNT` が既定になる。`--year-month` も省略でき、撮影年月へ自動分類される）。
+経路aの例（`--destination-root` を省略すると、ホスト設定の `ARCHIVE_LIBRARY_ROOT`（既定 `/mnt/camera_archive/photo-library`）が既定になる。`--year-month` も省略でき、撮影年月へ自動分類される）。
 
 ```sh
 .venv/bin/photo-copy copy \
@@ -115,7 +116,7 @@ ARW/JPEG/XMPの組はARW、HEIC/MOVの組はHEICの撮影日時を全ファイ�
 
 通常実行では `--dry-run` を外す。SSH接続はOpenSSHのControlMasterで多重化し、コピー元・配置先の組ごとにrsyncを1回呼ぶ。転送は `--times --itemize-changes --ignore-existing` を使い、コピー元削除・削除同期・インプレース書き込みは行わない。`--ignore-existing` によるスキップは内容一致とはみなさず、衝突として報告する。内容一致によるスキップ（`skipped`）はローカル転送と同じくサイズとSHA-256で判定し、コピー元のハッシュはMac側、配置先のハッシュはリモートで計算するため、ファイル本体をハッシュ比較のためだけに転送し直すことはない。
 
-隔離した試験先で確認する場合は、`ARCHIVE_MOUNT` 配下に試験用のディレクトリを作り、そこを `--destination-root` に指定する。試験後は忘れずに削除する。
+隔離した試験先で確認する場合は、`ARCHIVE_LIBRARY_ROOT` 配下に試験用のディレクトリを作り、そこを `--destination-root` に指定する。`ARCHIVE_MOUNT` 配下でも `ARCHIVE_LIBRARY_ROOT` の外（例: 直下の年フォルダ）は、rsync.pyの事前検査が配置先ルートとして拒否する。試験後は忘れずに削除する。
 
 ### 6. iPhoneから取り込む（イメージキャプチャ）
 
@@ -159,4 +160,37 @@ chmod 600 ~/.config/photo-copy/profiles.ini
 
 `--year-month` と `--dry-run` はプロファイルに書けない（実行ごとに判断する値のため）。コマンドライン引数はプロファイルの値を上書きする。適用したプロファイル名と解決後の全項目は詳細ログへ記録される。
 
-Amazon Photos Desktopの設定は0008で追加する。SMBマウントは取り込みに使わず、Amazon Photosと必要時の参照用とする。
+SMBマウントは取り込みに使わず、Amazon Photosと必要時の参照用とする。
+
+### 8. SMB共有の自動マウントを設定する
+
+Amazon Photos Desktopが起動時・再起動後も対象フォルダを見失わないよう、ログイン時にSMB共有（`/Volumes/CameraArchive`）を自動マウントするLaunchAgentを設定する。autofsのアイドルアンマウントは、Amazon Photos Desktopが対象を黙って見失うリスクがあるため採らない（[proposal.md](../proposal.md) 6章、0008で比較・検証）。
+
+初回だけ、Finderで `smb://<SMB_SERVER>/CameraArchive`（`SMB_SERVER` は `scripts/hosts/*.env` の値）に接続し、「このネットワーク共有を検索するときにパスワードを記憶」を選んでキーチェーンへパスワードを保存しておく。
+
+```sh
+./scripts/mac/setup-smb-mount.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --dry-run
+
+./scripts/mac/setup-smb-mount.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+```
+
+`~/Library/LaunchAgents/com.photo-manager.mount-CameraArchive.plist` を作成・登録し、`RunAtLoad` でログイン時に `scripts/mac/mount-camera-archive.sh` を実行する。既にマウント済みなら何もしない冪等なスクリプトである。
+
+```sh
+./scripts/mac/verify-smb-mount.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+```
+
+この検査はマウント位置、読み書き可否、LaunchAgentの登録を確認する。
+
+### 9. Amazon Photos Desktopを設定する
+
+インストール、ログイン、バックアップ対象フォルダの指定は手動で行う（0008で実機確認済み）。
+
+1. Amazon Photos Desktopをインストールし、Amazonアカウントでログインする。
+2. バックアップ対象フォルダとして、SMB共有経由の `/Volumes/CameraArchive/photo-library` を1つだけ指定する。年フォルダ（`2026` 等）を個別に追加する必要はない。年が変わっても対象指定を変えない（[proposal.md](../proposal.md) 4.1・6章）。
+3. 動画（MP4/MOV）を対象外にする個別の除外設定は無く、静止画（JPEG・HEIC・ARW・現像済みJPEG）だけが自動的にアップロードされることを0008で確認済みである。動画がアップロードされる場合は、アプリの設定変更やバージョンによる挙動変化の可能性があるため、対応を再検討する。
+4. 週次のバックアップ確認では、アプリのメイン画面の状態表示を見る。「BACKUP COMPLETE」等の正常表示でない場合（特に「DISCONNECTED」）は、SMB再接続だけでは自動回復しないため、**アプリ自体を再起動する**（0008で確認した既知の挙動）。
