@@ -7,6 +7,7 @@
 - [requirements.md](requirements.md): 実現したいことと前提条件
 - [proposal.md](proposal.md): 現在採用している構成と運用の提案
 - [setup/](setup/): 新しいPCで環境を再構築するための手順
+- [architecture/](architecture/README.md): 複数の変更にまたがって維持するアプリケーション設計
 
 要件を変更した場合は、必要に応じて提案との整合も確認する。実装方法だけを変更する場合は、要件を変更せず、提案または変更プランへ反映する。
 
