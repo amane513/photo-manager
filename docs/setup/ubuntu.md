@@ -118,4 +118,4 @@ sudo ./scripts/ubuntu/verify-copy-receiver.sh \
 
 この検査は主HDDのUUID・マウント・写真保存アカウントの書込み権限、rsync、ExifToolを確認する。SSH鍵の登録と、Macからの接続確認は手動で行う。
 
-`photo-copy` のrsync over SSH転送は実装済みである。Mac側から `photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` を実行すると、転送を伴わずに接続ユーザー、主HDDのマウントとUUID、書込み可否、Mac側・リモート側のrsyncバージョンを検査できる。再実行時の内容一致スキップ（同名候補のSHA-256比較）は、Ubuntu標準のcoreutils（`sha256sum` 等）で行うため、追加の導入は不要である。利用手順の正本は [mac.md](mac.md) である。Immichは0011、第2 HDDへのバックアップは0010で追加する。
+`photo-copy` のrsync over SSH転送は実装済みである。Mac側から `photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` を実行すると、転送を伴わずに接続ユーザー、主HDDのマウントとUUID、書込み可否、Mac側・リモート側のrsyncバージョンを検査できる。再実行時の内容一致スキップ（同名候補のSHA-256比較）は、Ubuntu標準のcoreutils（`sha256sum` 等）で行うため、追加の導入は不要である。利用手順の正本は [mac.md](mac.md) である。Immichは0011、第2 HDDへのバックアップは0013で追加する。

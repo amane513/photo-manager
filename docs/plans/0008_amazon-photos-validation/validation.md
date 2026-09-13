@@ -82,7 +82,7 @@
 - [docs/setup/README.md](../../setup/README.md) の整備状況表を更新し、「Mac側のSMBマウントの永続化」「Amazon Photos Desktopの設定」を整備済みにし、「主HDDのマウント・権限・SMB共有」の行にライブラリルートと0008を追記した。
 - iPhoneのAmazon Photos Auto-Saveが無効であることは、0008着手前から利用者が確認済みである（plan.mdの「現状」・検証項目A11参照）。0008では新たな設定変更は行わず、無効であることの確認記録のみを残す。
 
-### 0009・0010へ渡す前提
+### 0009・0010・0013へ渡す前提
 
 - **ライブラリルートの位置**: 主HDDの正本は `/mnt/camera_archive/photo-library/` である。年フォルダはこの下に置く（`/mnt/camera_archive/` 直下ではない）。Macからは `/Volumes/CameraArchive/photo-library/...`。
 - **Amazonの対象フォルダ**: 「photo-library」の1フォルダのみを指定済みであり、年が変わっても対象指定の変更は不要である。動画（MP4/MOV）はアプリ側で自然に除外される。
