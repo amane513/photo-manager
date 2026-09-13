@@ -12,8 +12,8 @@ iPhoneの写真・動画を選別せず保存する運用を前提に、イメ�
 
 ## 前提
 
-- 0012でHEIC、Live Photo、MOV、撮影日時、DB復元を確認していること。
-- 0013で主HDD上の原本とImmich DB・設定を第2 HDDへ保存し、復元できること。
+- 0011でExternal Libraryの全メディアを問題なく閲覧できていること。
+- 0013で主HDD上の原本とImmich DB・設定を第2 HDDへ保存し、DBダンプを含めて復元できること。
 - Sonyカメラは引き続き `photo-copy` で `/mnt/camera_archive/photo-library/` へ取り込み、Immichからread-onlyのExternal Libraryとして参照する。
 - iPhoneからのバックグラウンドアップロードはiOSが実行時期を管理するため、即時完了を前提にしない。
 

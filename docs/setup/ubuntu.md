@@ -143,4 +143,4 @@ CUDA起動後、`sudo ./scripts/ubuntu/verify-immich.sh --host-config ./scripts/
 
 ブラウザで `http://192.168.11.17:2283` を開き、初期管理ユーザーを作成する。次に管理画面でSmart Searchモデルを `XLM-Roberta-Large-ViT-H-14__frozen_laion5b_s13b_b90k` へ変更し、所有者をこの管理ユーザーとしてExternal Library `photo-library` を作成する。import pathは `/external/photo-library`、除外パターンは `**/*.ARW` と `**/*.arw` にする。設定後にスキャンとSmart Searchを開始する。
 
-完了後、管理画面のJob Queuesから `Create Database Dump` を実行する。`verify-immich.sh` は `/srv/immich/data/backups/` の最新`.sql.gz`をgzip検査する。初回管理ユーザー、検索評価、DBダンプ生成は秘密情報または実データを伴うため手動で行う。ダンプは0012の復元試験と0013の第2 HDDバックアップまで、同じSSD上にしかない。
+完了後、管理画面のJob Queuesから `Create Database Dump` を実行する。`verify-immich.sh` は `/srv/immich/data/backups/` の最新`.sql.gz`をgzip検査する。初回管理ユーザー、検索評価、DBダンプ生成は秘密情報または実データを伴うため手動で行う。ダンプは0013で第2 HDDへバックアップして実復元を確認するまで、同じSSD上にしかない。

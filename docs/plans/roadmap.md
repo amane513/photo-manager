@@ -2,7 +2,7 @@
 
 このファイルでは、実施済み・進行中のプランと、[proposal.md](../proposal.md) を実現するための今後のプランを管理する。
 
-更新日: 2026-09-13。[0006](0006_copy-cli-foundation/plan.md)・[0007](0007_media-workflow-validation/plan.md)・[0008](0008_amazon-photos-validation/plan.md)・[0009](0009_routine-import-operation/plan.md)・[0011](0011_immich-deployment/plan.md) は完了した。0010〜0013の再採番は [0023](0023_reorder-validation-roadmap/plan.md) を参照する。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
+更新日: 2026-09-13。[0006](0006_copy-cli-foundation/plan.md)・[0007](0007_media-workflow-validation/plan.md)・[0008](0008_amazon-photos-validation/plan.md)・[0009](0009_routine-import-operation/plan.md)・[0011](0011_immich-deployment/plan.md) は完了した。0012は0011の実績で充足したため独立作業を行わず完了とし、DB復元を0013へ統合した。詳細は [0024](0024_simplify-immich-validation/plan.md) を参照する。0010〜0013の再採番は [0023](0023_reorder-validation-roadmap/plan.md) を参照する。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
 
 ## 番号とフェーズの扱い
 
@@ -22,7 +22,7 @@
               │
 フェーズ2  取り込み運用の確立  0007 配置・閲覧 ─> 0008 Amazon ─> 0009 日常運用の確立
               │
-フェーズ3  検証と閲覧基盤      0010 全件検証 ─> 0011 Immich導入 ─> 0012 表示・DB復元
+フェーズ3  検証と閲覧基盤      0010 全件検証 ─> 0011 Immich導入・表示（0012は独立作業なし）
               │
 フェーズ4  保全と運用の拡張    0013 バックアップ    0014 GUI    0022 iPhone直接バックアップ
               │
@@ -77,8 +77,8 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 | ID | 予定フォルダ | 状態 | 概要・完了の目安 | 前提 |
 |---|---|---|---|---|
 | 0010 | [transfer-automation](0010_transfer-automation/plan.md) | 実装・検証完了 | 通常のコピー1回に全件数・容量・SHA-256検証を自動で組み込み、取り込み時点の検証マニフェストを残す。内部の検証APIはコピー処理から分離する。コピー元は0013完了まで保持する | 0009。0009で取り込んだ実データと保持中のコピー元を検証に使う |
-| 0011 | [immich-deployment](0011_immich-deployment/plan.md) | 完了 | SSDへImmich v3.2.0を導入し、CPUスモークテスト後にRTX 4060 TiのCUDA機械学習へ切り替えた。XLM-R Large、read-only External Library、実DBダンプ、Compose・設定・起動手順を正本化した。表示・検索評価・DBダンプは完了し、DB復元と別HDD保全は0012・0013へ引き継ぐ | 0005、0010。第2 HDDへの保全は0013で行うため、コピー元を保持する |
-| 0012 | `0012_immich-media-validation` | 未着手 | ARW除外、JPEG・HEIC・Live Photo・動画・現像済みJPEGの表示、途中ファイルの扱い、DB復元を確認する | 0011と代表サンプル。0007の選別・現像確認完了は不要 |
+| 0011 | [immich-deployment](0011_immich-deployment/plan.md) | 完了 | SSDへImmich v3.2.0を導入し、CPUスモークテスト後にRTX 4060 TiのCUDA機械学習へ切り替えた。XLM-R Large、read-only External Library、実DBダンプ、Compose・設定・起動手順を正本化した。全メディアの表示・検索評価・DBダンプ生成は完了し、DB復元と別HDD保全は0013へ引き継ぐ | 0005、0010。第2 HDDへの保全は0013で行うため、コピー元を保持する |
+| 0012 | [immich-media-validation](0012_immich-media-validation/plan.md) | 完了（独立作業なし） | 0011で全メディアの表示を実機確認し、現在も問題なく閲覧できているため、形式別の再検証を省略した。表示上の問題は発生時に個別対応し、DB復元は0013でバックアップからの復元と一体で確認する | 0011の実施結果 |
 
 ## フェーズ4: 保全と運用の拡張
 
@@ -86,9 +86,9 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 
 | ID | 予定フォルダ | 状態 | 着手条件 | 概要 |
 |---|---|---|---|---|
-| 0013 | `0013_backup-workflow` | 未着手 | 0002、0005、0012 | 原則週1回の第2 HDD接続・コマンド実行、原本復元、Immich DB・設定、更新XMP等の保存方式を確立する。削除済み写真の残存を許容し、0009で設計したコピー元削除の判断条件にバックアップ結果を組み込む |
+| 0013 | `0013_backup-workflow` | 未着手 | 0002、0005、0010、0011 | 原則週1回の第2 HDD接続・コマンド実行、原本復元、Immich DBダンプからの実復元、設定、更新XMP等の保存方式を確立する。削除済み写真の残存を許容し、0009で設計したコピー元削除の判断条件にバックアップ結果を組み込む |
 | 0014 | `0014_copy-gui` | 未着手 | 0006の共通APIと0009の操作が固まる | GUIから保存先の選択、実行、結果・進捗確認を行う。CLIと同じ処理を使い、必要ならHTTP等のアダプタを追加する |
-| 0022 | [immich-iphone-backup](0022_immich-iphone-backup/plan.md) | 未着手 | 0012、0013 | iPhoneの写真・動画をImmichモバイルアプリから主HDD上のUpload Libraryへ直接保存する。Sonyカメラは既存経路を維持し、Amazon Photos、第2 HDD、DB復元を含めて切り替える |
+| 0022 | [immich-iphone-backup](0022_immich-iphone-backup/plan.md) | 未着手 | 0013 | iPhoneの写真・動画をImmichモバイルアプリから主HDD上のUpload Libraryへ直接保存する。Sonyカメラは既存経路を維持し、Amazon Photos、第2 HDD、DB復元を含めて切り替える |
 
 0013のバックアップが完成するまでは、0010で内容一致を確認済みでもコピー元を削除しない。
 
@@ -111,6 +111,7 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 | ID | プラン | 状態 | 概要 |
 |---|---|---|---|
 | 0023 | [reorder-validation-roadmap](0023_reorder-validation-roadmap/plan.md) | 完了（文書改訂） | 全件検証を0010、バックアップを0013へ再採番し、0009から0013までの推奨順と参照を更新した。0022追加時に記録IDを0023へ再採番した |
+| 0024 | [simplify-immich-validation](0024_simplify-immich-validation/plan.md) | 完了（文書改訂） | 0012の形式別再検証を省略し、DB復元を0013のバックアップ工程へ統合した |
 
 ## 推奨する着手順
 
@@ -121,9 +122,9 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 0004 + 構築済みSSH ────────────┴─> 0006 rsync最小CLI ─> 初期動作確認
                                   ├─> 0007 基本確認 ──────┐
                                   ├─> 自動分類・同名スキップ ─┴─> 0008 Amazon ─> 0009 日常運用確立
-0006 最小版 ─> 0009 日常運用確立 ─> 0010 全件検証 ─> 0011 Immich ─> 0012 表示・DB復元
-0002 + 0005 ────────────────────────────────────────────────┴─> 0013 バックアップ・原本／DB復元
-0012 + 0013 ─> 0022 ImmichによるiPhone直接バックアップ
+0006 最小版 ─> 0009 日常運用確立 ─> 0010 全件検証 ─> 0011 Immich・表示確認
+0002 + 0005 + 0010 + 0011 ────────────────────────────────> 0013 バックアップ・原本／DB復元
+0013 ─> 0022 ImmichによるiPhone直接バックアップ
 0006 + 0009 ─> 0014 GUI
 0007 選別・現像 ─> 必要になったときに確認（上記工程の前提にしない）
 ```
