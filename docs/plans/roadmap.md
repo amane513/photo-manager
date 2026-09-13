@@ -2,7 +2,7 @@
 
 このファイルでは、実施済み・進行中のプランと、[proposal.md](../proposal.md) を実現するための今後のプランを管理する。
 
-更新日: 2026-09-13。[0006](0006_copy-cli-foundation/plan.md)・[0007](0007_media-workflow-validation/plan.md)・[0008](0008_amazon-photos-validation/plan.md)・[0009](0009_routine-import-operation/plan.md) は完了した。0010〜0013の再採番は [0022](0022_reorder-validation-roadmap/plan.md) を参照する。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
+更新日: 2026-09-13。[0006](0006_copy-cli-foundation/plan.md)・[0007](0007_media-workflow-validation/plan.md)・[0008](0008_amazon-photos-validation/plan.md)・[0009](0009_routine-import-operation/plan.md)・[0011](0011_immich-deployment/plan.md) は完了した。0010〜0013の再採番は [0022](0022_reorder-validation-roadmap/plan.md) を参照する。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
 
 ## 番号とフェーズの扱い
 
@@ -77,7 +77,7 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 | ID | 予定フォルダ | 状態 | 概要・完了の目安 | 前提 |
 |---|---|---|---|---|
 | 0010 | [transfer-automation](0010_transfer-automation/plan.md) | 実装・検証完了 | 通常のコピー1回に全件数・容量・SHA-256検証を自動で組み込み、取り込み時点の検証マニフェストを残す。内部の検証APIはコピー処理から分離する。コピー元は0013完了まで保持する | 0009。0009で取り込んだ実データと保持中のコピー元を検証に使う |
-| 0011 | [immich-deployment](0011_immich-deployment/plan.md) | 設計済み・未着手 | SSDへ導入し、CPUスモークテスト後にRTX 4060 TiのCUDA機械学習へ切り替える。日本語検索用XLM-R Largeモデル、read-only External Library、実DBダンプを構築し、Compose・設定・起動手順を正本化する | 0005、0010。第2 HDDへの保全は0013で行うため、コピー元を保持する |
+| 0011 | [immich-deployment](0011_immich-deployment/plan.md) | 完了 | SSDへImmich v3.2.0を導入し、CPUスモークテスト後にRTX 4060 TiのCUDA機械学習へ切り替えた。XLM-R Large、read-only External Library、実DBダンプ、Compose・設定・起動手順を正本化した。表示・検索評価・DBダンプは完了し、DB復元と別HDD保全は0012・0013へ引き継ぐ | 0005、0010。第2 HDDへの保全は0013で行うため、コピー元を保持する |
 | 0012 | `0012_immich-media-validation` | 未着手 | ARW除外、JPEG・HEIC・Live Photo・動画・現像済みJPEGの表示、途中ファイルの扱い、DB復元を確認する | 0011と代表サンプル。0007の選別・現像確認完了は不要 |
 
 ## フェーズ4: 保全と運用の拡張

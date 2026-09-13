@@ -1,0 +1,11 @@
+# Immich v3.2.0の公式hwaccel.ml.ymlからCUDA定義だけを保持する。
+services:
+  cuda:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu

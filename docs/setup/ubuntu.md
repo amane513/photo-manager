@@ -118,4 +118,29 @@ sudo ./scripts/ubuntu/verify-copy-receiver.sh \
 
 この検査は主HDDのUUID・マウント・写真保存アカウントの書込み権限、rsync、ExifToolを確認する。SSH鍵の登録と、Macからの接続確認は手動で行う。
 
-`photo-copy` のrsync over SSH転送は実装済みである。Mac側から `photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` を実行すると、転送を伴わずに接続ユーザー、主HDDのマウントとUUID、書込み可否、Mac側・リモート側のrsyncバージョンを検査できる。再実行時の内容一致スキップ（同名候補のSHA-256比較）は、Ubuntu標準のcoreutils（`sha256sum` 等）で行うため、追加の導入は不要である。利用手順の正本は [mac.md](mac.md) である。Immichは0011、第2 HDDへのバックアップは0013で追加する。
+`photo-copy` のrsync over SSH転送は実装済みである。Mac側から `photo-copy check --host-config ./scripts/hosts/ubuntu-amane-yajima.env` を実行すると、転送を伴わずに接続ユーザー、主HDDのマウントとUUID、書込み可否、Mac側・リモート側のrsyncバージョンを検査できる。再実行時の内容一致スキップ（同名候補のSHA-256比較）は、Ubuntu標準のcoreutils（`sha256sum` 等）で行うため、追加の導入は不要である。利用手順の正本は [mac.md](mac.md) である。
+
+### 10. Immichを導入する
+
+Immichは `v3.2.0` に固定し、派生データを内蔵SSDの `/srv/immich/` に置く。主HDDの原本はコンテナ内の `/external/photo-library` にread-onlyで提供する。先に状態を確認する。
+
+```sh
+./scripts/ubuntu/inspect-immich-host.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+sudo ./scripts/ubuntu/setup-immich-runtime.sh
+sudo ./scripts/ubuntu/setup-immich.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env --dry-run
+```
+
+ランタイムがすべて揃っていることを確認後、次を実行する。初回だけDBパスワード（16文字以上の英数字）を端末へ入力する。これは `/srv/immich/app/.env` にroot所有・0600で保存され、リポジトリへ保存されない。
+
+```sh
+sudo ./scripts/ubuntu/setup-immich.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+sudo ./scripts/ubuntu/setup-immich.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env --cpu-smoke
+sudo ./scripts/ubuntu/verify-immich.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+sudo ./scripts/ubuntu/setup-immich.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env --cuda
+```
+
+CUDA起動後、`sudo ./scripts/ubuntu/verify-immich.sh --host-config ./scripts/hosts/ubuntu-amane-yajima.env --require-cuda` を実行する。CPUへ一時的に戻す場合は `docker compose --project-directory /srv/immich/app -f /srv/immich/app/docker-compose.yml up -d` を使う。DB、`data/`、モデルキャッシュは削除しない。
+
+ブラウザで `http://192.168.11.17:2283` を開き、初期管理ユーザーを作成する。次に管理画面でSmart Searchモデルを `XLM-Roberta-Large-ViT-H-14__frozen_laion5b_s13b_b90k` へ変更し、所有者をこの管理ユーザーとしてExternal Library `photo-library` を作成する。import pathは `/external/photo-library`、除外パターンは `**/*.ARW` と `**/*.arw` にする。設定後にスキャンとSmart Searchを開始する。
+
+完了後、管理画面のJob Queuesから `Create Database Dump` を実行する。`verify-immich.sh` は `/srv/immich/data/backups/` の最新`.sql.gz`をgzip検査する。初回管理ユーザー、検索評価、DBダンプ生成は秘密情報または実データを伴うため手動で行う。ダンプは0012の復元試験と0013の第2 HDDバックアップまで、同じSSD上にしかない。

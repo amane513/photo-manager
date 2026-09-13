@@ -1,0 +1,7 @@
+# CUDA機械学習だけを有効にするCompose差分である。動画変換には使わない。
+services:
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION}-cuda
+    extends:
+      file: hwaccel.ml.yml
+      service: cuda

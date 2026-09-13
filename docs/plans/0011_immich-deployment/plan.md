@@ -4,7 +4,13 @@
 
 更新日: 2026-09-13
 
-状態: 設計済み・未着手
+状態: 完了
+
+## 実施結果
+
+2026-09-13に実機へ導入し、完了条件を満たした。Immichは`v3.2.0`で稼働し、CPUスモークテスト後にRTX 4060 TiのCUDA機械学習へ切り替えた。主HDDは`/external/photo-library`へread-onlyで提供し、External Library `photo-library`、ARW除外、XLM-R Largeモデル、Smart Search全件索引、DBダンプを設定した。検索評価は日本語5件、英語または日英混在3件で合格した。
+
+実機値、検証コマンド、DBダンプのサイズ・SHA-256、導入中に修正したML APIポートの記録は[validation.md](validation.md)を正本とする。ARWを含む形式別表示の詳細とDB復元は0012、第2 HDDへの保全は0013で実施する。以下のチェックリストは着手時の手順であり、実施結果は`validation.md`を参照する。
 
 ## 目的
 
