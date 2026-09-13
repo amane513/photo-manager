@@ -71,7 +71,9 @@ class FakeRun:
         if "sha256sum" in command[-1]:
             return completed(0, stdout=self.digest_stdout)
         if "while IFS=" in command[-1]:
-            return completed(0, stdout=self.facts_stdout)
+            if self.facts_stdout:
+                return completed(0, stdout=self.facts_stdout)
+            return completed(0, stdout=b"".join(b"missing\0" + path + b"\0" for path in kwargs.get("input", b"").split(b"\0") if path))
         input_bytes = kwargs.get("input", b"")
         if input_bytes == _PREFLIGHT_FACTS_SCRIPT.encode():
             return completed(0, stdout=self.remote_facts_stdout)

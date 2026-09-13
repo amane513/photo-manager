@@ -35,9 +35,18 @@ class DestinationFacts:
     exists: bool
     is_regular_file: bool
     size: int | None
+    mtime_ns: int | None = None
 
 
-class Transfer(Protocol):
+class ReadOnlyTransfer(Protocol):
+    """検証専用APIが受け取る読み取り専用の型境界。"""
+
+    def facts(self, destinations: Sequence[Path]) -> dict[Path, DestinationFacts]: ...
+
+    def digest(self, destinations: Sequence[Path]) -> dict[Path, str | None]: ...
+
+
+class Transfer(ReadOnlyTransfer, Protocol):
     """共通処理が転送方式を知らずに使う5操作。"""
 
     def preflight(self) -> None:

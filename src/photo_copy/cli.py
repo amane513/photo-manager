@@ -210,6 +210,7 @@ def _load_profile_if_requested(parsed: argparse.Namespace) -> Profile | None:
 
 
 def _run_copy(parsed: argparse.Namespace) -> int:
+    started_at = datetime.now().astimezone()
     try:
         profile = _load_profile_if_requested(parsed)
     except ValueError as error:
@@ -264,6 +265,8 @@ def _run_copy(parsed: argparse.Namespace) -> int:
             close()
 
     payload = result_as_dict(result)
+    payload["started_at"] = started_at.isoformat()
+    payload["finished_at"] = datetime.now().astimezone().isoformat()
     payload["profile"] = profile.name if profile is not None else None
     payload["host_config"] = str(host_config_path) if host_config_path is not None else None
     payload["log_dir"] = str(log_dir)
@@ -275,16 +278,30 @@ def _run_copy(parsed: argparse.Namespace) -> int:
     log_path = log_dir / f"copy-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.json"
     log_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     counts = result.counts()
+    verification_counts = result.verification.counts()
     print(
-        "結果: "
-        f"コピー済み {counts['copied']}件、予定 {counts['planned']}件、"
-        f"スキップ {counts['skipped']}件、衝突 {counts['conflict']}件、失敗 {counts['failed']}件、"
-        f"未処理 {counts['unresolved']}件、除外 {counts['excluded']}件"
+        "コピー結果: "
+        f"コピー済み {counts['copied']}件、既存一致 {counts['skipped']}件、衝突 {counts['conflict']}件、失敗 {counts['failed']}件、"
+        f"保存対象の未処理 {counts['unresolved']}件、対象外 {counts['not-targeted']}件、除外 {counts['excluded']}件"
     )
+    if result.verification.not_run:
+        print(f"検証結果: 未実行（{result.verification.abort_reason}）")
+    else:
+        target_count, target_size, matched_count, matched_size = result.verification.totals()
+        print(
+            "検証結果: "
+            f"一致 {verification_counts['matched']}件、欠損 {verification_counts['missing']}件、不一致 {verification_counts['different']}件、"
+            f"読取不能 {verification_counts['unreadable']}件、未解決 {verification_counts['unresolved']}件、"
+            f"対象外 {verification_counts['not-targeted']}件、除外 {verification_counts['excluded']}件"
+        )
+        print(f"合計: 対象 {target_count}件 / {target_size}バイト、検証済み {matched_count}件 / {matched_size}バイト")
+        if result.verification.manifest_sha256 is not None:
+            print(f"マニフェストSHA-256: {result.verification.manifest_sha256}")
     if result.aborted:
         print(f"中断: {result.abort_reason}")
     print(f"詳細ログ: {log_path}")
-    return 0 if not (counts["conflict"] or counts["failed"] or counts["unresolved"]) else 1
+    copy_failed = counts["conflict"] or counts["failed"] or counts["unresolved"] or result.aborted
+    return 0 if not copy_failed and result.verification.successful else 1
 
 
 def main(arguments: list[str] | None = None) -> int:

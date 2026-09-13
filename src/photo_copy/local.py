@@ -24,8 +24,12 @@ class LocalTransfer:
             if destination.is_symlink() or (destination.exists() and not destination.is_file()):
                 results[destination] = DestinationFacts(exists=True, is_regular_file=False, size=None)
             elif destination.exists():
+                try:
+                    stat = destination.stat()
+                except OSError:
+                    continue
                 results[destination] = DestinationFacts(
-                    exists=True, is_regular_file=True, size=destination.stat().st_size
+                    exists=True, is_regular_file=True, size=stat.st_size, mtime_ns=stat.st_mtime_ns
                 )
             else:
                 results[destination] = DestinationFacts(exists=False, is_regular_file=False, size=None)

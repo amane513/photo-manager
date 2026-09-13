@@ -31,6 +31,7 @@ class ItemStatus(str, Enum):
     CONFLICT = "conflict"
     FAILED = "failed"
     UNRESOLVED = "unresolved"
+    NOT_TARGETED = "not-targeted"
     EXCLUDED = "excluded"
 
 
@@ -72,9 +73,94 @@ class CopyResult:
     items: tuple[PlannedItem, ...]
     aborted: bool = False
     abort_reason: str | None = None
+    # 既存一致の判定で取得済みの値。検証で同じファイルを再読しないために保持する。
+    matched_evidence: dict[Path, tuple[int, str]] | None = None
 
     def counts(self) -> dict[str, int]:
         counts = {status.value: 0 for status in ItemStatus}
         for item in self.items:
             counts[item.status.value] += 1
         return counts
+
+
+class VerificationStatus(str, Enum):
+    """コピー完了後の内容検証における各ファイルの状態。"""
+
+    MATCHED = "matched"
+    MISSING = "missing"
+    DIFFERENT = "different"
+    INVALID_DESTINATION = "invalid-destination"
+    UNREADABLE = "unreadable"
+    UNRESOLVED = "unresolved"
+    NOT_TARGETED = "not-targeted"
+    EXCLUDED = "excluded"
+
+
+@dataclass(frozen=True)
+class VerificationItem:
+    """一つのコピー元と配置先の検証結果。"""
+
+    source: Path
+    destination: Path | None
+    destination_relative: Path | None
+    status: VerificationStatus
+    source_size: int | None = None
+    source_sha256: str | None = None
+    destination_size: int | None = None
+    destination_sha256: str | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class VerificationResult:
+    """全保存対象の読み取り専用検証結果。"""
+
+    items: tuple[VerificationItem, ...]
+    manifest_sha256: str | None = None
+    not_run: bool = False
+    abort_reason: str | None = None
+
+    def counts(self) -> dict[str, int]:
+        counts = {status.value: 0 for status in VerificationStatus}
+        for item in self.items:
+            counts[item.status.value] += 1
+        return counts
+
+    def totals(self) -> tuple[int, int, int, int]:
+        targets = [item for item in self.items if item.status not in {VerificationStatus.NOT_TARGETED, VerificationStatus.EXCLUDED}]
+        matched = [item for item in self.items if item.status is VerificationStatus.MATCHED]
+        return len(targets), sum(item.source_size or 0 for item in targets), len(matched), sum(item.source_size or 0 for item in matched)
+
+    @property
+    def successful(self) -> bool:
+        return not self.not_run and all(item.status in {VerificationStatus.MATCHED, VerificationStatus.NOT_TARGETED, VerificationStatus.EXCLUDED} for item in self.items)
+
+
+@dataclass(frozen=True)
+class CopyExecutionResult:
+    """転送結果と検証結果を一つの利用者操作として束ねる。"""
+
+    copy: CopyResult
+    verification: VerificationResult
+    copy_duration_seconds: float = 0.0
+    verification_duration_seconds: float = 0.0
+
+    # 旧来の共通API利用者との互換性のため、コピー結果を透過して公開する。
+    @property
+    def request(self) -> CopyRequest:
+        return self.copy.request
+
+    @property
+    def items(self) -> tuple[PlannedItem, ...]:
+        return self.copy.items
+
+    @property
+    def aborted(self) -> bool:
+        return self.copy.aborted
+
+    @property
+    def abort_reason(self) -> str | None:
+        return self.copy.abort_reason
+
+    def counts(self) -> dict[str, int]:
+        return self.copy.counts()

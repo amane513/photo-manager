@@ -269,8 +269,9 @@ class CopyServiceTest(unittest.TestCase):
 
             result = execute_copy(self.request(source, root / "destination"), timestamps_for=lambda paths: {p: None for p in paths})
 
-            self.assertEqual(result.items[0].status, ItemStatus.UNRESOLVED)
-            self.assertEqual(result_as_dict(result)["counts"]["unresolved"], 1)
+            self.assertEqual(result.items[0].status, ItemStatus.NOT_TARGETED)
+            self.assertEqual(result_as_dict(result)["counts"]["not-targeted"], 1)
+            self.assertTrue(result.verification.successful)
 
     def test_cli_writes_structured_log(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -285,6 +286,8 @@ class CopyServiceTest(unittest.TestCase):
                 "--year-month", "2026-09", "--device", "camera", "--log-dir", str(logs),
             ])
 
-            self.assertEqual(exit_code, 1)
+            self.assertEqual(exit_code, 0)
             log = next(logs.glob("*.json"))
-            self.assertEqual(json.loads(log.read_text(encoding="utf-8"))["counts"]["unresolved"], 1)
+            payload = json.loads(log.read_text(encoding="utf-8"))
+            self.assertEqual(payload["counts"]["not-targeted"], 1)
+            self.assertEqual(payload["verification"]["counts"]["not-targeted"], 1)

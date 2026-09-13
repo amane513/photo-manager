@@ -62,7 +62,10 @@ _FACTS_SCRIPT = (
     "while IFS= read -r -d '' path; do\n"
     '  if [ -f "$path" ] && [ ! -L "$path" ]; then\n'
     '    size=$(wc -c < "$path" 2>/dev/null | tr -d "[:space:]")\n'
-    "    printf 'file:%s\\0%s\\0' \"$size\" \"$path\"\n"
+    '    mtime_seconds=$(stat -c %Y -- "$path" 2>/dev/null)\n'
+    '    mtime_nanos=$(stat -c %y -- "$path" 2>/dev/null | sed -n "s/.*\\.\\([0-9]\\{9\\}\\).*/\\1/p")\n'
+    '    mtime_nanos=${mtime_nanos:-000000000}\n'
+    "    printf 'file:%s:%s%s\\0%s\\0' \"$size\" \"$mtime_seconds\" \"$mtime_nanos\" \"$path\"\n"
     '  elif [ -e "$path" ] || [ -L "$path" ]; then\n'
     "    printf 'other\\0%s\\0' \"$path\"\n"
     "  else\n"
@@ -259,12 +262,16 @@ class RsyncSshTransfer:
         results: dict[Path, DestinationFacts] = {}
         for destination in destinations:
             value = by_path.get(str(destination))
-            if value is None or value == "missing":
+            if value is None:
+                continue
+            if value == "missing":
                 results[destination] = DestinationFacts(exists=False, is_regular_file=False, size=None)
             elif value.startswith("file:"):
-                size_text = value[len("file:") :]
+                parts = value[len("file:") :].split(":", 1)
+                size_text = parts[0]
                 size = int(size_text) if size_text.isdigit() else None
-                results[destination] = DestinationFacts(exists=True, is_regular_file=size is not None, size=size)
+                mtime_ns = int(parts[1]) * 1_000_000_000 if len(parts) == 2 and parts[1].isdigit() else None
+                results[destination] = DestinationFacts(exists=True, is_regular_file=size is not None, size=size, mtime_ns=mtime_ns)
             else:
                 results[destination] = DestinationFacts(exists=True, is_regular_file=False, size=None)
         return results

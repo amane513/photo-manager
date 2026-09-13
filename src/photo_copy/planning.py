@@ -122,8 +122,13 @@ def _reference_member(members: list[Path]) -> Path | None:
     return None
 
 
-def _is_supported(path: Path) -> bool:
+def is_supported(path: Path) -> bool:
+    """classifyで保存対象にする形式かを返す公開判定関数。"""
     return path.suffix.lower() in SUPPORTED_SUFFIXES
+
+
+# 既存の内部利用者を壊さない別名である。
+_is_supported = is_supported
 
 
 def _destination(request: CopyRequest, path: Path, *, year: str, month: str, timestamp: str | None) -> Path:
@@ -208,7 +213,7 @@ def _build_classify_plan(
         unsupported = [member for member in members if not _is_supported(member)]
         supported = [member for member in members if _is_supported(member)]
         for member in unsupported:
-            planned.append(PlannedItem(member, None, None, key, ItemStatus.UNRESOLVED, "未対応の形式である"))
+            planned.append(PlannedItem(member, None, None, key, ItemStatus.NOT_TARGETED, "未対応の形式である"))
         if not supported:
             continue
 
