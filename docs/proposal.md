@@ -89,12 +89,19 @@ SSDにはOS、Docker、Immich、PostgreSQL、サムネイル、モデル、変�
 
 ```text
 /srv/immich/
-├── postgres/
-├── thumbs/
-├── encoded-video/
-├── model-cache/
-└── profile/
+├── app/                 # Compose定義と秘密値を含む実行時設定
+├── data/                # UPLOAD_LOCATION
+│   ├── backups/
+│   ├── encoded-video/
+│   ├── library/
+│   ├── profile/
+│   ├── thumbs/
+│   └── upload/
+├── postgres/            # DB_DATA_LOCATION
+└── model-cache/
 ```
+
+Immichの公式Compose構成に合わせ、同じSSD上の派生データは `data/` を1つのbind mountとして扱う。PostgreSQLと機械学習モデルだけを分離する。秘密値を含む実行時設定はコミットせず、`app/` に権限を制限して置く。
 
 `/mnt/camera_archive/` は配置案であり、0005でHDDのマウント・共有と対応づける。未マウント時にSSDやMacのローカルディレクトリへ誤書込みしないようにする。
 
@@ -189,11 +196,12 @@ External Libraryの除外パターンに次を設定する。
 
 ### 7.3 段階導入
 
-1. CPUだけで基本動作、タイムライン、検索、動画再生を確認する。
-2. 小規模なテストフォルダでARW除外、HEIC、Live Photo、動画、現像済みJPEGを確認する。
-3. DBバックアップと復元を確認する。
-4. 問題がなければ全ライブラリをスキャンする。
-5. その後、必要に応じてRTX 4060 Tiによる機械学習や動画変換の高速化を有効にする。
+1. CPU構成でサービス、DB、SSD配置、家庭内LANからの接続だけを最小確認する。既定モデルによるSmart Search全件ジョブは実行しない。
+2. 全ライブラリの索引作成前にRTX 4060 TiのCUDA機械学習へ切り替える。Smart Searchには日本語検索を優先して `XLM-Roberta-Large-ViT-H-14__frozen_laion5b_s13b_b90k` を使用する。
+3. 主HDDをread-onlyのExternal Libraryとして登録し、ARW除外を設定してから全ライブラリをスキャンする。
+4. 小規模な代表データでARW除外、HEIC、Live Photo、動画、現像済みJPEGを確認する。
+5. DBバックアップと復元を確認する。
+6. 動画変換のGPU高速化と、機械学習モデルの追加比較・常駐設定・並列数の調整は、実運用後に必要な場合だけ0018で行う。
 
 ## 8. バックアップ
 
@@ -315,4 +323,4 @@ Ubuntu側は主HDDのマウントと共有、SSH・rsyncの受入れ、Immichと
 - バックアップの履歴管理方式と自動実行。
 - 一律リネームやペア削除補助は、必要性が生じた場合だけ検討する。
 - GUIの形態とHTTP APIの要否。
-- GPU高速化と祖父母向け共有の変更。
+- 動画変換のGPU高速化、機械学習の追加調整、祖父母向け共有の変更。
