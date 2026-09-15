@@ -16,6 +16,7 @@ for container in immich_postgres immich_redis immich_server immich_machine_learn
   [[ "$state" == 'running healthy' || "$state" == 'running ' ]] || die "コンテナが正常ではない: $container ($state)"
 done
 ss -ltnH "sport = :$IMMICH_PORT" | grep -Fq "$IMMICH_LAN_BIND_ADDRESS:$IMMICH_PORT" || die 'LAN bindが一致しない'
+ss -ltnH "sport = :$IMMICH_PORT" | grep -Fq "127.0.0.1:$IMMICH_PORT" || die 'Tailscale Serve用のloopback bindがない'
 docker inspect immich_server --format '{{range .Mounts}}{{if eq .Destination "/external/photo-library"}}{{.RW}}{{end}}{{end}}' | grep -Fxq false || die 'External Libraryがread-onlyではない'
 docker exec immich_server sh -c 'test -r /external/photo-library && ! test -w /external/photo-library' || die 'コンテナからExternal Libraryのread-only性を確認できない'
 if [[ "$REQUIRE_CUDA" == true ]]; then

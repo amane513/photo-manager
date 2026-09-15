@@ -13,6 +13,8 @@ services:
       - .env
     ports:
       - '${IMMICH_LAN_BIND_ADDRESS}:${IMMICH_PORT}:2283'
+      # Tailscale Serveの転送元。tailnetへ直接公開せず、ホスト内だけで待ち受ける。
+      - '127.0.0.1:${IMMICH_PORT}:2283'
     depends_on:
       - redis
       - database
