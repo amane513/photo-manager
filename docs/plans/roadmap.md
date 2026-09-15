@@ -112,6 +112,7 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 | 0023 | [reorder-validation-roadmap](0023_reorder-validation-roadmap/plan.md) | 完了（文書改訂） | 全件検証を0010、バックアップを0013へ再採番し、0009から0013までの推奨順と参照を更新した。0022追加時に記録IDを0023へ再採番した |
 | 0024 | [simplify-immich-validation](0024_simplify-immich-validation/plan.md) | 完了（文書改訂） | 0012の形式別再検証を省略し、DB復元を0013のバックアップ工程へ統合した |
 | 0025 | [tailscale-immich-access](0025_tailscale-immich-access/plan.md) | 実装完了・実機検証待ち | Tailscale ServeでImmichをtailnet内限定のHTTPS URLへ公開し、iPhoneからLAN外でも閲覧できるようにする |
+| 0026 | [ubuntu-remote-workflow](0026_ubuntu-remote-workflow/plan.md) | 完了（作業指示の更新） | SSH接続の優先順位と、Ubuntuのcheckoutへ未コミット差分を残さない反映手順を共通ルール化した |
 
 ## 推奨する着手順
 

@@ -73,3 +73,11 @@ CodexとClaude Codeが共有する指示をこのファイルに記載する。
 ## Git運用
 
 - ユーザーから明示的な指示がない限り、このリポジトリのコミットは `main` ブランチ上で実施する。
+
+## Ubuntuへの接続とリモート作業
+
+- UbuntuへSSH接続するときは、まず `ssh ubuntu` を試す。接続できない場合は `ssh ubuntu_by_tailscale` を試す。
+- Ubuntu上の `~/work/photo-manager` は実機への反映・検証に使うcheckoutとし、ソースやドキュメントを直接編集しない。変更はMac側のこのリポジトリで行い、`main`へコミットしてoriginへpushした後、Ubuntu側で `git pull --ff-only origin main` により反映する。
+- Ubuntu上のリポジトリへ `scp`、`rsync`、パイプ経由の `git apply` などで未コミットのファイルを配置しない。実機で得た検証結果もMac側で `validation.md` 等へ記録し、コミット経由で反映する。
+- Ubuntuで作業を始める前と終えた後に `git status --porcelain` を確認する。差分がある場合は、別セッションの作業である可能性があるため、stash、reset、上書き、削除を行わず、内容と状況をユーザーへ報告して停止する。
+- Ubuntu側のmainを更新する前に作業ツリーがcleanであることを確認する。更新にはfast-forwardのみを許可し、追従後は `git rev-list --left-right --count main...origin/main` が `0 0` であることを確認する。
