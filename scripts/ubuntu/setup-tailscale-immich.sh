@@ -48,7 +48,9 @@ if ! tailscale status --json | grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*
   printf 'Ubuntuをtailnetへ追加する。表示されるURLでiPhoneと同じアカウントにログインすること。\n'
   tailscale up
 fi
+printf 'loopback上のImmichが応答するまで最大60秒待機する。\n'
 curl --fail --silent --show-error --max-time 5 \
+  --retry 30 --retry-all-errors --retry-delay 2 --retry-max-time 60 \
   --output /dev/null "http://127.0.0.1:$IMMICH_PORT/" \
   || die 'loopback上のImmichへ接続できない。setup-immich.sh --update-config --cudaを先に実行すること'
 tailscale serve --bg "$IMMICH_PORT"

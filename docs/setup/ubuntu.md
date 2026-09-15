@@ -190,4 +190,6 @@ iPhoneでは次を行う。
 3. ImmichアプリのServer Endpoint URLにも同じHTTPS URLを入力し、既存のImmichユーザーでログインする。
 4. Tailscaleを切るとHTTPS URLへ接続できず、再び有効にすると閲覧できることを確認する。
 
+Immichアプリで接続先を変更した後もCurrent Server Addressに家庭内LANのIPが残る場合や、高解像度画像だけを取得できない場合は、アプリを完全に終了して再起動する。0025の実機確認では再起動後にTailscale URLが適用され、高解像度画像まで表示できた。
+
 Serveはtailnet内だけに公開される。公開状態の停止はUbuntuで `sudo tailscale serve off` を実行する。iPhoneを紛失した場合は、Tailscaleの管理画面から当該端末を削除する。

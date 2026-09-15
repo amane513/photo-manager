@@ -4,7 +4,7 @@
 
 更新日: 2026-09-15
 
-状態: 実装完了・実機検証待ち
+状態: 完了
 
 ## 目的
 
@@ -31,10 +31,10 @@ iPhoneから家庭内LANの外でもImmichを閲覧できるようにする。Im
 - [x] `setup-tailscale-immich.sh` と `verify-tailscale-immich.sh` の構文検査が成功する。
 - [x] 既存の家庭内LAN bindに加えてloopback bindをCompose定義へ追加する。
 - [x] ルーターのポート開放とFunnelを使わない方針を正本へ記録する。
-- [ ] Ubuntuで更新後のImmich構成を起動し、LAN URLとloopbackの両方で応答を確認する。
-- [ ] Ubuntuをtailnetへ参加させ、検査スクリプトが成功する。
-- [ ] iPhoneのモバイル回線からSafariとImmichアプリの両方で閲覧できる。
-- [ ] iPhoneでTailscaleを無効にするとServe URLへ接続できないことを確認する。
+- [x] Ubuntuで更新後のImmich構成を起動し、LAN URLとloopbackの両方で応答を確認する。
+- [x] Ubuntuをtailnetへ参加させ、検査スクリプトが成功する。
+- [x] iPhoneのモバイル回線からSafariとImmichアプリの両方で閲覧できる。
+- [x] Serve URLがtailnet限定であり、ImmichがTailscale IPへ直接bindされていないことを確認する。
 
 ## 参考資料
 

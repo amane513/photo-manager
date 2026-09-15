@@ -2,7 +2,7 @@
 
 このファイルでは、実施済み・進行中のプランと、[proposal.md](../proposal.md) を実現するための今後のプランを管理する。
 
-更新日: 2026-09-15。[0006](0006_copy-cli-foundation/plan.md)・[0007](0007_media-workflow-validation/plan.md)・[0008](0008_amazon-photos-validation/plan.md)・[0009](0009_routine-import-operation/plan.md)・[0011](0011_immich-deployment/plan.md) は完了した。0012は0011の実績で充足したため独立作業を行わず完了とし、DB復元を0013へ統合した。詳細は [0024](0024_simplify-immich-validation/plan.md) を参照する。Tailscale経由のiPhone閲覧は [0025](0025_tailscale-immich-access/plan.md) で実装し、実機検証待ちである。0010〜0013の再採番は [0023](0023_reorder-validation-roadmap/plan.md) を参照する。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
+更新日: 2026-09-15。[0006](0006_copy-cli-foundation/plan.md)・[0007](0007_media-workflow-validation/plan.md)・[0008](0008_amazon-photos-validation/plan.md)・[0009](0009_routine-import-operation/plan.md)・[0011](0011_immich-deployment/plan.md) は完了した。0012は0011の実績で充足したため独立作業を行わず完了とし、DB復元を0013へ統合した。詳細は [0024](0024_simplify-immich-validation/plan.md) を参照する。Tailscale経由のiPhone閲覧は [0025](0025_tailscale-immich-access/plan.md) で実装・実機検証を完了した。0010〜0013の再採番は [0023](0023_reorder-validation-roadmap/plan.md) を参照する。運用簡素化は [0004](0004_simplify-photo-workflow/plan.md)、当初の見直しとレビューは [0003](0003_workflow-roadmap-revision/plan.md) を参照する。
 
 ## 番号とフェーズの扱い
 
@@ -111,7 +111,7 @@ SDはMacに接続する。iPhoneの機器からの取得はイメージキャプ
 |---|---|---|---|
 | 0023 | [reorder-validation-roadmap](0023_reorder-validation-roadmap/plan.md) | 完了（文書改訂） | 全件検証を0010、バックアップを0013へ再採番し、0009から0013までの推奨順と参照を更新した。0022追加時に記録IDを0023へ再採番した |
 | 0024 | [simplify-immich-validation](0024_simplify-immich-validation/plan.md) | 完了（文書改訂） | 0012の形式別再検証を省略し、DB復元を0013のバックアップ工程へ統合した |
-| 0025 | [tailscale-immich-access](0025_tailscale-immich-access/plan.md) | 実装完了・実機検証待ち | Tailscale ServeでImmichをtailnet内限定のHTTPS URLへ公開し、iPhoneからLAN外でも閲覧できるようにする |
+| 0025 | [tailscale-immich-access](0025_tailscale-immich-access/plan.md) | 完了 | Tailscale ServeでImmichをtailnet内限定のHTTPS URLへ公開し、iPhoneからLAN外でも閲覧できるようにした |
 | 0026 | [ubuntu-remote-workflow](0026_ubuntu-remote-workflow/plan.md) | 完了（作業指示の更新） | SSH接続の優先順位と、Ubuntuのcheckoutへ未コミット差分を残さない反映手順を共通ルール化した |
 
 ## 推奨する着手順
