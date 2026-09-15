@@ -7,6 +7,7 @@
 - Ubuntu 64-bitをインストール済みで、sudoを実行できるアカウントがある。
 - 4TB主HDDを接続している。マウント先は `/mnt/camera_archive` とする。正本のライブラリルート（年フォルダを置く場所）はその1階層下の `/mnt/camera_archive/photo-library/` である。Amazon Photos Desktopがマウント直下のボリューム自体を対象にできず1つ下のフォルダしか指定できないため、年フォルダを直下に置かずライブラリルートを新設している（0008、[proposal.md](../proposal.md) 4.1）。
 - Immichの作業データとPostgreSQLは内蔵SSDの `/srv/immich/` に置く。
+- iPhoneからLAN外で閲覧する場合は、UbuntuとiPhoneを同じTailscaleのtailnetへ参加させる。
 
 ## 手動で行う作業
 
@@ -144,3 +145,49 @@ CUDA起動後、`sudo ./scripts/ubuntu/verify-immich.sh --host-config ./scripts/
 ブラウザで `http://192.168.11.17:2283` を開き、初期管理ユーザーを作成する。次に管理画面でSmart Searchモデルを `XLM-Roberta-Large-ViT-H-14__frozen_laion5b_s13b_b90k` へ変更し、所有者をこの管理ユーザーとしてExternal Library `photo-library` を作成する。import pathは `/external/photo-library`、除外パターンは `**/*.ARW` と `**/*.arw` にする。設定後にスキャンとSmart Searchを開始する。
 
 完了後、管理画面のJob Queuesから `Create Database Dump` を実行する。`verify-immich.sh` は `/srv/immich/data/backups/` の最新`.sql.gz`をgzip検査する。初回管理ユーザー、検索評価、DBダンプ生成は秘密情報または実データを伴うため手動で行う。ダンプは0013で第2 HDDへバックアップして実復元を確認するまで、同じSSD上にしかない。
+
+### 11. iPhoneからTailscale経由でImmichを開く
+
+ルーターのポート開放やTailscale Funnelは使わない。家庭内LAN向けの `http://192.168.11.17:2283` は維持し、Tailscale Serve用として同じImmichを `127.0.0.1:2283` にもbindする。
+
+まず更新後のCompose定義を日時付きバックアップ付きで反映し、CUDA構成を再作成する。データベース、写真、サムネイルは削除しない。
+
+```sh
+sudo ./scripts/ubuntu/setup-immich.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --dry-run --update-config
+
+sudo ./scripts/ubuntu/setup-immich.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --cuda --update-config
+
+sudo ./scripts/ubuntu/verify-immich.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --require-cuda
+```
+
+次にTailscaleを構成する。初回は `--install-missing` を付ける。スクリプトはTailscale公式インストーラーを一時ファイルへ取得して実行し、Ubuntuが未認証の場合だけ `tailscale up` のログインURLを表示する。iPhoneで使うものと同じTailscaleアカウントで認証する。既に導入・認証済みなら再利用する。
+
+```sh
+sudo ./scripts/ubuntu/setup-tailscale-immich.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --dry-run --install-missing
+
+sudo ./scripts/ubuntu/setup-tailscale-immich.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env \
+  --install-missing
+
+sudo ./scripts/ubuntu/verify-tailscale-immich.sh \
+  --host-config ./scripts/hosts/ubuntu-amane-yajima.env
+```
+
+初回の `tailscale serve` 実行時にHTTPSの有効化を求められた場合は、表示されたTailscaleの確認ページで有効化する。スクリプト末尾の状態表示にある `https://<Ubuntu名>.<tailnet名>.ts.net` が接続先である。
+
+iPhoneでは次を行う。
+
+1. App StoreからTailscaleを導入し、Ubuntuと同じtailnetへログインしてVPN構成を許可する。
+2. Wi-Fiを切ってモバイル回線にし、Safariで上記HTTPS URLを開いてImmichのログイン画面を確認する。
+3. ImmichアプリのServer Endpoint URLにも同じHTTPS URLを入力し、既存のImmichユーザーでログインする。
+4. Tailscaleを切るとHTTPS URLへ接続できず、再び有効にすると閲覧できることを確認する。
+
+Serveはtailnet内だけに公開される。公開状態の停止はUbuntuで `sudo tailscale serve off` を実行する。iPhoneを紛失した場合は、Tailscaleの管理画面から当該端末を削除する。

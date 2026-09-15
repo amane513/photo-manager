@@ -56,3 +56,9 @@ Macではrsyncをdotfilesで管理する。`setup-copy-cli.sh` はExifTool、プ
 Ubuntuでは `setup-copy-receiver.sh` が不足する `rsync` と `libimage-exiftool-perl` をaptで導入し、`verify-copy-receiver.sh` が主HDDへの受入れ状態を検査する。いずれも既に導入済みのパッケージを更新しない。
 
 `mac/profiles.ini.example` は `photo-copy` の定型設定（プロファイル）のテンプレートである。`~/.config/photo-copy/profiles.ini` へコピーして実際のパスへ書き換える。利用手順の正本は [docs/setup/mac.md](../docs/setup/mac.md) である。
+
+## 0025: Tailscale経由のImmich閲覧
+
+`setup-tailscale-immich.sh` はTailscaleの導入・tailnetへの接続と、loopback上のImmichをtailnet内限定HTTPSへ転送するServe設定を行う。Tailscaleがない場合だけ `--install-missing` を必要とし、公式インストーラーを一時ファイルへ取得して実行する。初回認証とHTTPS有効化は表示されたURLから手動で行う。
+
+`verify-tailscale-immich.sh` はtailscaled、tailnet接続、Immichのloopback bind、Serveの転送先を変更せずに検査する。詳細な実行順とiPhone側の操作は [docs/setup/ubuntu.md](../docs/setup/ubuntu.md) を参照する。
