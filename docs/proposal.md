@@ -2,7 +2,7 @@
 
 作成日: 2026-08-23
 
-更新日: 2026-09-13
+更新日: 2026-09-15
 
 対象: Sony α7C II、iPhone 13、MacBook Air、Ubuntu常時稼働PC
 
@@ -16,6 +16,7 @@
 - MacとHDDは年月・機器別の構成に統一し、イベントフォルダは廃止する。
 - Amazon PhotosはMacからSMB上の正本の静止画をバックアップする。Mac内の作業コピーは対象にしない。
 - Immichは正本をread-onlyのExternal Libraryとして参照し、ARWを除外する。
+- iPhoneからのImmich閲覧はTailscale Serveによるtailnet内限定のHTTPS URLを使う。
 - 8TB第2 HDDへ正本とImmich DB・設定をバックアップし、通常時は取り外す。
 - コピー用CLIを初期検証より先に用意し、共通処理APIを将来のGUIでも使う。
 - 環境構築はスクリプトと手順書として残し、新しいPCで同じ環境を組み直せるようにする。
@@ -176,7 +177,9 @@ iCloud+は採用しない。取り込み前のiPhone本体が唯一のコピー�
 - `/mnt/camera_archive` をコンテナへ読み取り専用でマウントする。
 - Upload LibraryではなくExternal Libraryを主に使う。
 - Immichから原本の削除・整理を行わない。
-- 初期は家庭内LANだけで利用し、ルーターからImmichのポートを直接公開しない。
+- 家庭内LANでは従来のLAN URLを利用できる。iPhoneからLAN外で閲覧するときは、UbuntuとiPhoneを同じtailnetへ参加させ、Tailscale ServeによるHTTPS URLを使う。
+- Immichは家庭内LANのIPと `127.0.0.1` だけで待ち受ける。Tailscale ServeはloopbackのImmichへ転送し、tailnetのアクセス制御を適用する。
+- ルーターでImmichのポートを開放しない。インターネットへ公開するTailscale Funnelも使わない。
 
 マウントの考え方は次のとおり。
 
@@ -204,6 +207,12 @@ External Libraryの除外パターンに次を設定する。
 4. 全メディアの表示を実データで確認する。0011で全件スキャン後の表示を確認済みであり、形式別の再検証は問題が発生した場合だけ行う。
 5. DBダンプを生成し、第2 HDDへのバックアップを構築する0013で実復元を確認する。
 6. 動画変換のGPU高速化と、機械学習モデルの追加比較・常駐設定・並列数の調整は、実運用後に必要な場合だけ0018で行う。
+
+### 7.4 iPhoneからのリモート閲覧
+
+UbuntuへTailscaleを導入し、Tailscale Serveで `http://127.0.0.1:2283` をtailnet内限定のHTTPS URLへ転送する。Serveの設定はバックグラウンドで永続化する。iPhoneにはTailscaleとImmichの各アプリを導入し、Ubuntuと同じtailnetへログインしたうえで、Serveが表示する `https://<Ubuntu名>.<tailnet名>.ts.net` をImmichのServer Endpoint URLに設定する。
+
+Tailscaleによる端末到達制御はImmichのユーザー認証を置き換えない。iPhoneでは引き続きImmichのアカウントでログインする。端末を紛失した場合はTailscale管理画面から当該端末をtailnetから削除する。
 
 ## 8. バックアップ
 
